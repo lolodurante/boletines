@@ -38,6 +38,8 @@ export interface DirectorReportCardData {
   id: string
   studentId: string
   studentName: string
+  periodId: string
+  periodName: string
   courseId: string
   courseName: string
   completedDate: string
@@ -126,12 +128,17 @@ function buildDirectorEvaluationRows(): DirectorEvaluationRow[] {
 function buildDirectorReportCards(): DirectorReportCardData[] {
   return reportCards.map((reportCard) => {
     const student = students.find((item) => item.id === reportCard.studentId)
-    const relatedEvaluations = evaluations.filter((evaluation) => evaluation.studentId === reportCard.studentId)
+    const period = periods.find((item) => item.id === reportCard.periodId)
+    const relatedEvaluations = evaluations.filter(
+      (evaluation) => evaluation.studentId === reportCard.studentId && evaluation.periodId === reportCard.periodId,
+    )
 
     return {
       id: reportCard.id,
       studentId: reportCard.studentId,
       studentName: student?.name ?? "Desconocido",
+      periodId: reportCard.periodId,
+      periodName: period?.name ?? "—",
       courseId: student?.courseId ?? "",
       courseName: student ? (getCourseById(student.courseId)?.name ?? "—") : "—",
       completedDate: reportCard.completedDate,

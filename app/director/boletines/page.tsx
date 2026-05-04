@@ -58,6 +58,8 @@ interface ReportCardData {
   id: string
   studentId: string
   studentName: string
+  periodId: string
+  periodName: string
   courseId: string
   courseName: string
   completedDate: string
@@ -88,7 +90,6 @@ export default function BoletinesPage() {
   const [revisionMessage, setRevisionMessage] = useState("")
 
   const selectedReport = dynamicReportCardsData.find(r => r.id === selectedReportId)
-  const activePeriod = data.periods.find(period => period.status === "Activo") ?? data.periods[0]
   const selectedReportTeachers = Array.from(
     new Map(selectedReport?.grades.map((grade) => [grade.teacherId, grade.teacherName]) ?? []).entries(),
   )
@@ -248,7 +249,7 @@ export default function BoletinesPage() {
                   <div>
                     <CardTitle>Boletin — {selectedReport.studentName}</CardTitle>
                     <CardDescription>
-                      {selectedReport.courseName} • {activePeriod?.name}
+                      {selectedReport.courseName} • {selectedReport.periodName}
                     </CardDescription>
                   </div>
                   <StatusBadge status={selectedReport.status} />
@@ -289,7 +290,7 @@ export default function BoletinesPage() {
                       </div>
                       <div>
                         <span className="text-muted-foreground">Periodo:</span>
-                        <p className="font-medium">{activePeriod?.name}</p>
+                        <p className="font-medium">{selectedReport.periodName}</p>
                       </div>
                     </div>
                   </div>

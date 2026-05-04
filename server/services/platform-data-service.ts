@@ -144,12 +144,17 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     }))
     const directorReportCards: PlatformData["directorReportCards"] = mappedReportCards.map((reportCard) => {
       const student = mappedStudents.find((item) => item.id === reportCard.studentId)
-      const relatedEvaluations = mappedEvaluations.filter((evaluation) => evaluation.studentId === reportCard.studentId)
+      const period = mappedPeriods.find((item) => item.id === reportCard.periodId)
+      const relatedEvaluations = mappedEvaluations.filter(
+        (evaluation) => evaluation.studentId === reportCard.studentId && evaluation.periodId === reportCard.periodId,
+      )
 
       return {
         id: reportCard.id,
         studentId: reportCard.studentId,
         studentName: student?.name ?? "Desconocido",
+        periodId: reportCard.periodId,
+        periodName: period?.name ?? "—",
         courseId: student?.courseId ?? "",
         courseName: mappedCourses.find((course) => course.id === student?.courseId)?.name ?? "—",
         completedDate: reportCard.completedDate,
