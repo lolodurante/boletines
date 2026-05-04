@@ -1,0 +1,341 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum UserRole {
+  DIRECTOR
+  TEACHER
+  ADMIN
+}
+
+enum UserStatus {
+  INVITED
+  ACTIVE
+  DISABLED
+}
+
+enum StudentStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum AcademicPeriodType {
+  TRIMESTER
+  BIMESTER
+  QUARTER
+  CUSTOM
+}
+
+enum AcademicPeriodStatus {
+  DRAFT
+  ACTIVE
+  CLOSED
+}
+
+enum EvaluationStatus {
+  DRAFT
+  SUBMITTED
+  NEEDS_REVISION
+  APPROVED
+}
+
+enum ReportCardStatus {
+  NOT_READY
+  READY_FOR_REVIEW
+  NEEDS_REVISION
+  APPROVED
+  SENT
+  BLOCKED_MISSING_EMAIL
+}
+
+enum ReportDeliveryStatus {
+  PENDING
+  SENT
+  FAILED
+  BLOCKED
+}
+
+enum ZohoUploadStatus {
+  PENDING
+  UPLOADED
+  FAILED
+  SKIPPED
+}
+
+enum ZohoSyncStatus {
+  SUCCESS
+  FAILED
+  SKIPPED
+}
+
+model User {
+  id         String     @id @default(uuid()) @db.Uuid
+  authUserId String?    @unique @map("auth_user_id")
+  name       String
+  email      String     @unique
+  role       UserRole
+  status     UserStatus @default(ACTIVE)
+  zohoId     String?    @unique @map("zoho_id")
+  createdAt  DateTime   @default(now()) @map("created_at")
+  updatedAt  DateTime   @updatedAt @map("updated_at")
+
+  teacher Teacher?
+
+  @@index([role])
+  @@index([status])
+  @@map("users")
+}
+
+model Student {
+  id          String        @id @default(uuid()) @db.Uuid
+  firstName   String        @map("first_name")
+  lastName    String        @map("last_name")
+  grade       String
+  division    String
+  familyEmail String?       @map("family_email")
+  zohoId      String?       @unique @map("zoho_id")
+  status      StudentStatus @default(ACTIVE)
+  createdAt   DateTime      @default(now()) @map("created_at")
+  updatedAt   DateTime      @updatedAt @map("updated_at")
+
+  evaluations Evaluation[]
+  reportCards ReportCard[]
+
+  @@index([grade, division])
+  @@index([status])
+  @@map("students")
+}
+
+model Teacher {
+  id        String   @id @default(uuid()) @db.Uuid
+  userId    String   @unique @map("user_id") @db.Uuid
+  zohoId    String?  @unique @map("zoho_id")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignments CourseAssignment[]
+  evaluations Evaluation[]
+
+  @@index([userId])
+  @@map("teachers")
+}
+
+model Subject {
+  id         String   @id @default(uuid()) @db.Uuid
+  name       String
+  gradeRange String[] @map("grade_range")
+  active     Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  criteria    EvaluationCriterion[]
+  assignments CourseAssignment[]
+  evaluations Evaluation[]
+
+  @@unique([name])
+  @@index([active])
+  @@map("subjects")
+}
+
+model EvaluationCriterion {
+  id          String   @id @default(uuid()) @db.Uuid
+  subjectId   String   @map("subject_id") @db.Uuid
+  name        String
+  description String
+  gradeRange  String[] @map("grade_range")
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  subject          Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  evaluationGrades EvaluationGrade[]
+
+  @@index([subjectId])
+  @@index([active])
+  @@map("evaluation_criteria")
+}
+
+model GradingScale {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String
+  gradeFrom Int      @map("grade_from")
+  gradeTo   Int      @map("grade_to")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  levels GradingScaleLevel[]
+
+  @@unique([name])
+  @@index([gradeFrom, gradeTo])
+  @@map("grading_scales")
+}
+
+model GradingScaleLevel {
+  id             String   @id @default(uuid()) @db.Uuid
+  gradingScaleId String   @map("grading_scale_id") @db.Uuid
+  label          String
+  value          String
+  order          Int
+  description    String?
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  gradingScale     GradingScale      @relation(fields: [gradingScaleId], references: [id], onDelete: Cascade)
+  evaluationGrades EvaluationGrade[]
+
+  @@unique([gradingScaleId, value])
+  @@index([gradingScaleId])
+  @@map("grading_scale_levels")
+}
+
+model AcademicPeriod {
+  id        String               @id @default(uuid()) @db.Uuid
+  name      String
+  type      AcademicPeriodType
+  startDate DateTime             @map("start_date")
+  dueDate   DateTime             @map("due_date")
+  teacherDeadline DateTime?       @map("teacher_deadline")
+  status    AcademicPeriodStatus @default(DRAFT)
+  createdAt DateTime             @default(now()) @map("created_at")
+  updatedAt DateTime             @updatedAt @map("updated_at")
+
+  assignments CourseAssignment[]
+  evaluations Evaluation[]
+  reportCards ReportCard[]
+
+  @@index([status])
+  @@index([startDate, dueDate])
+  @@map("academic_periods")
+}
+
+model CourseAssignment {
+  id        String   @id @default(uuid()) @db.Uuid
+  teacherId String   @map("teacher_id") @db.Uuid
+  subjectId String   @map("subject_id") @db.Uuid
+  grade     String
+  division  String
+  periodId  String   @map("period_id") @db.Uuid
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  teacher Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  period  AcademicPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+
+  @@unique([teacherId, subjectId, grade, division, periodId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([periodId])
+  @@index([grade, division])
+  @@map("course_assignments")
+}
+
+model Evaluation {
+  id                 String           @id @default(uuid()) @db.Uuid
+  studentId          String           @map("student_id") @db.Uuid
+  teacherId          String           @map("teacher_id") @db.Uuid
+  subjectId          String           @map("subject_id") @db.Uuid
+  periodId           String           @map("period_id") @db.Uuid
+  status             EvaluationStatus @default(DRAFT)
+  generalObservation String?          @map("general_observation")
+  submittedAt        DateTime?        @map("submitted_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  student Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  teacher Teacher             @relation(fields: [teacherId], references: [id], onDelete: Cascade)
+  subject Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  period  AcademicPeriod      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  grades  EvaluationGrade[]
+
+  @@unique([studentId, teacherId, subjectId, periodId])
+  @@index([studentId])
+  @@index([teacherId])
+  @@index([subjectId])
+  @@index([periodId])
+  @@index([status])
+  @@map("evaluations")
+}
+
+model EvaluationGrade {
+  id            String   @id @default(uuid()) @db.Uuid
+  evaluationId  String   @map("evaluation_id") @db.Uuid
+  criterionId   String   @map("criterion_id") @db.Uuid
+  scaleLevelId  String   @map("scale_level_id") @db.Uuid
+  observation   String?
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  evaluation Evaluation          @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  criterion  EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
+  scaleLevel GradingScaleLevel   @relation(fields: [scaleLevelId], references: [id], onDelete: Restrict)
+
+  @@unique([evaluationId, criterionId])
+  @@index([evaluationId])
+  @@index([criterionId])
+  @@index([scaleLevelId])
+  @@map("evaluation_grades")
+}
+
+model ReportCard {
+  id                  String           @id @default(uuid()) @db.Uuid
+  studentId           String           @map("student_id") @db.Uuid
+  periodId            String           @map("period_id") @db.Uuid
+  status              ReportCardStatus @default(NOT_READY)
+  directorObservation String?          @map("director_observation")
+  pdfUrl              String?          @map("pdf_url")
+  sentAt              DateTime?        @map("sent_at")
+  zohoUploadStatus    ZohoUploadStatus @default(PENDING) @map("zoho_upload_status")
+  createdAt           DateTime         @default(now()) @map("created_at")
+  updatedAt           DateTime         @updatedAt @map("updated_at")
+
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  period     AcademicPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  deliveries ReportDelivery[]
+
+  @@unique([studentId, periodId])
+  @@index([studentId])
+  @@index([periodId])
+  @@index([status])
+  @@index([zohoUploadStatus])
+  @@map("report_cards")
+}
+
+model ReportDelivery {
+  id             String               @id @default(uuid()) @db.Uuid
+  reportCardId   String               @map("report_card_id") @db.Uuid
+  recipientEmail String?              @map("recipient_email")
+  status         ReportDeliveryStatus @default(PENDING)
+  errorMessage   String?              @map("error_message")
+  sentAt         DateTime?            @map("sent_at")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
+
+  reportCard ReportCard @relation(fields: [reportCardId], references: [id], onDelete: Cascade)
+
+  @@index([reportCardId])
+  @@index([status])
+  @@map("report_deliveries")
+}
+
+model ZohoSyncLog {
+  id           String         @id @default(uuid()) @db.Uuid
+  entityType   String         @map("entity_type")
+  entityId     String         @map("entity_id")
+  zohoId       String?        @map("zoho_id")
+  action       String
+  status       ZohoSyncStatus
+  errorMessage String?        @map("error_message")
+  createdAt    DateTime       @default(now()) @map("created_at")
+
+  @@index([entityType, entityId])
+  @@index([zohoId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("zoho_sync_logs")
+}

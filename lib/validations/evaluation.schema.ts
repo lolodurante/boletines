@@ -1,0 +1,36 @@
+import { z } from "zod"
+import { idSchema, isoDateSchema } from "./common"
+
+export const evaluationStatusSchema = z.enum(["DRAFT", "SUBMITTED", "NEEDS_REVISION", "APPROVED"])
+
+export const evaluationSchema = z.object({
+  id: idSchema,
+  studentId: idSchema,
+  teacherId: idSchema,
+  subjectId: idSchema,
+  periodId: idSchema,
+  status: evaluationStatusSchema,
+  generalObservation: z.string().optional(),
+  submittedAt: isoDateSchema.optional(),
+})
+
+export const evaluationGradeSchema = z.object({
+  id: idSchema,
+  evaluationId: idSchema,
+  criterionId: idSchema,
+  scaleLevelId: idSchema,
+  observation: z.string().optional(),
+})
+
+export const courseAssignmentSchema = z.object({
+  id: idSchema,
+  teacherId: idSchema,
+  subjectId: idSchema,
+  grade: z.string().min(1),
+  division: z.string().min(1),
+  periodId: idSchema,
+})
+
+export type EvaluationInput = z.infer<typeof evaluationSchema>
+export type EvaluationGradeInput = z.infer<typeof evaluationGradeSchema>
+export type CourseAssignmentInput = z.infer<typeof courseAssignmentSchema>
