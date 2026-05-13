@@ -16,7 +16,7 @@
 - Acceso a datos en `server/repositories`.
 - Validaciones en `lib/validations`.
 - Tipos compartidos en `types`.
-- Integraciones externas en `lib/zoho`, `lib/email` y `lib/pdf`.
+- Integraciones externas en `lib/email` y `lib/pdf`.
 
 ## TypeScript
 
@@ -29,7 +29,6 @@
 
 - Todo input externo se valida con Zod.
 - Server actions y API routes validan payload antes de llamar servicios.
-- Respuestas externas de Zoho deben validarse.
 - Datos usados para PDF deben validarse antes de generar.
 
 ## Errores
@@ -51,5 +50,5 @@
 
 - Unit tests para servicios puros y validaciones.
 - Integration tests para flujos criticos.
-- E2E para director, docente y envio de boletin cuando exista backend real.
-- Mocks para Zoho y email en tests y desarrollo local.
+- E2E para director, docente y generacion de PDF cuando exista backend real.
+- Mocks para email en tests y desarrollo local.

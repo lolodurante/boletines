@@ -6,10 +6,8 @@ export type EvaluationStatus = "Completo" | "En progreso" | "Sin iniciar"
 export type ReportStatus =
   | "No listo"
   | "Listo para revisión"
-  | "Pendiente de envío"
-  | "Enviado"
+  | "PDF generado"
   | "Requiere revisión"
-  | "Sin correo registrado"
 
 export type PeriodStatus = "Activo" | "Cerrado" | "Próximo"
 
@@ -79,7 +77,7 @@ export interface ReportCard {
   studentId: string
   periodId: string
   status: ReportStatus
-  sentDate?: string
+  generatedDate?: string
   completedDate: string
   directorObservation?: string
   pdfUrl?: string
@@ -456,30 +454,30 @@ export const reportCards: ReportCard[] = [
     id: "rc1",
     studentId: "st1",
     periodId: "p2",
-    status: "Pendiente de envío",
+    status: "Listo para revisión",
     completedDate: "hace 3 horas"
   },
   {
     id: "rc2",
     studentId: "st3",
     periodId: "p2",
-    status: "Pendiente de envío",
+    status: "Listo para revisión",
     completedDate: "hace 5 horas"
   },
   {
     id: "rc3",
     studentId: "st4",
     periodId: "p2",
-    status: "Sin correo registrado",
+    status: "Listo para revisión",
     completedDate: "hace 2 horas"
   },
   {
     id: "rc4",
     studentId: "st5",
     periodId: "p2",
-    status: "Enviado",
+    status: "PDF generado",
     completedDate: "hace 1 día",
-    sentDate: "hace 1 día"
+    generatedDate: "hace 1 día"
   },
   {
     id: "rc5",

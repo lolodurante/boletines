@@ -26,8 +26,6 @@ import {
   FileText, 
   CheckCircle2, 
   Clock, 
-  AlertCircle,
-  Mail,
   Calendar,
   Users,
   ArrowRight
@@ -55,9 +53,8 @@ interface CourseProgressData {
 export default function DirectorDashboard() {
   const { data } = usePlatformData()
   const activePeriod = data.periods.find(period => period.status === "Activo") ?? data.periods[0]
-  const sendableReportStatuses = new Set(["Listo para revisión", "Pendiente de envío"])
-  const pendingReports = data.reportCards.filter(report => sendableReportStatuses.has(report.status)).length
-  const missingEmails = data.students.filter(student => !student.parentEmail).length
+  const pendingReports = data.reportCards.filter(report => report.status === "Listo para revisión").length
+  const generatedReports = data.reportCards.filter(report => report.status === "PDF generado").length
   const teachersWithPendingDelivery = data.teacherPerformance.filter(teacher => teacher.completionRate < 100).length
   const courseProgressData: CourseProgressData[] = data.courses.map((course) => {
     const progress = activePeriod
@@ -83,7 +80,7 @@ export default function DirectorDashboard() {
   })
   const completedCourses = courseProgressData.filter((course) => course.status === "Completo").length
   const recentReports = data.directorReportCards
-    .filter(report => sendableReportStatuses.has(report.status))
+    .filter(report => report.status === "Listo para revisión")
     .slice(0, 5)
 
   return (
@@ -108,7 +105,7 @@ export default function DirectorDashboard() {
           <CardContent>
             <div className="text-3xl font-bold text-accent">{pendingReports}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              para enviar este periodo
+              para generar PDF
             </p>
           </CardContent>
         </Card>
@@ -116,7 +113,7 @@ export default function DirectorDashboard() {
         <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Evaluaciones completas
+              Cursos completos
             </CardTitle>
             <CheckCircle2 className="size-4 text-muted-foreground" />
           </CardHeader>
@@ -126,7 +123,7 @@ export default function DirectorDashboard() {
               <span className="text-lg text-muted-foreground">/{Math.max(data.courses.length, 1)}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
-              cursos
+              todos los docentes entregaron
             </p>
             <Progress value={(completedCourses / Math.max(data.courses.length, 1)) * 100} className="mt-2 h-1.5" />
           </CardContent>
@@ -147,23 +144,18 @@ export default function DirectorDashboard() {
           </CardContent>
         </Card>
 
-        <Card className="border-destructive/50">
+        <Card>
           <CardHeader className="flex flex-row items-center justify-between pb-2">
             <CardTitle className="text-sm font-medium text-muted-foreground">
-              Correos faltantes
+              PDFs generados
             </CardTitle>
-            <AlertCircle className="size-4 text-destructive" />
+            <FileText className="size-4 text-success" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-destructive">{missingEmails}</div>
+            <div className="text-3xl font-bold text-success">{generatedReports}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              alumnos sin correo de tutor
+              boletines con PDF
             </p>
-            <Button variant="link" size="sm" className="mt-1 h-auto p-0 text-xs text-destructive" asChild>
-              <Link href="/director/boletines?missingEmail=true">
-                Ver listado
-              </Link>
-            </Button>
           </CardContent>
         </Card>
       </div>
@@ -214,7 +206,7 @@ export default function DirectorDashboard() {
                 Avance por curso
               </CardTitle>
               <CardDescription>
-                Estado de evaluaciones del periodo actual
+                Estado de entregas del periodo actual
               </CardDescription>
             </CardHeader>
             <CardContent>
@@ -310,7 +302,7 @@ export default function DirectorDashboard() {
                 Boletines recientes listos
               </CardTitle>
               <CardDescription>
-                Listos para revision y envio
+                Listos para revision y generacion de PDF
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-3">

@@ -5,7 +5,6 @@ import { useSearchParams } from "next/navigation"
 import Link from "next/link"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Textarea } from "@/components/ui/textarea"
 import { StatusBadge } from "@/components/status-badge"
 import { GradeBadge } from "@/components/grade-badge"
@@ -33,19 +32,11 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Alert,
-  AlertDescription,
-  AlertTitle,
-} from "@/components/ui/alert"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { 
-  AlertCircle,
-  Mail,
-  Send,
+  Download,
   FileText,
-  ExternalLink,
   MessageSquare
 } from "lucide-react"
 import { toast } from "sonner"
@@ -63,8 +54,9 @@ interface ReportCardData {
   courseId: string
   courseName: string
   completedDate: string
-  status: "No listo" | "Listo para revisión" | "Pendiente de envío" | "Sin correo registrado" | "Enviado" | "Requiere revisión"
+  status: "No listo" | "Listo para revisión" | "PDF generado" | "Requiere revisión"
   parentEmail: string | null
+  directorObservation?: string
   pdfUrl?: string
   grades: Array<{
     subjectName: string
@@ -79,27 +71,32 @@ export default function BoletinesPage() {
   const searchParams = useSearchParams()
   const { data } = usePlatformData()
   const [reportCards, setReportCards] = useState<ReportCardData[]>([])
-  const showMissingEmailOnly = searchParams.get("missingEmail") === "true"
-  const dynamicReportCardsData: ReportCardData[] = showMissingEmailOnly
-    ? reportCards.filter((report) => !report.parentEmail)
-    : reportCards
+  const dynamicReportCardsData: ReportCardData[] = reportCards
   const [selectedReportId, setSelectedReportId] = useState(dynamicReportCardsData[0]?.id)
+  const [selectedCourseFilter, setSelectedCourseFilter] = useState("all")
   const [directorObservation, setDirectorObservation] = useState("")
   const [isRevisionDialogOpen, setIsRevisionDialogOpen] = useState(false)
   const [revisionTeacher, setRevisionTeacher] = useState("")
   const [revisionMessage, setRevisionMessage] = useState("")
 
+  const filteredReportCards = selectedCourseFilter === "all"
+    ? dynamicReportCardsData
+    : dynamicReportCardsData.filter(r => r.courseId === selectedCourseFilter)
+
   const selectedReport = dynamicReportCardsData.find(r => r.id === selectedReportId)
   const selectedReportTeachers = Array.from(
     new Map(selectedReport?.grades.map((grade) => [grade.teacherId, grade.teacherName]) ?? []).entries(),
   )
-  const canSendSelectedReport =
-    Boolean(selectedReport?.parentEmail) &&
-    (selectedReport?.status === "Listo para revisión" || selectedReport?.status === "Pendiente de envío")
+  const canGenerateSelectedReport =
+    selectedReport?.status === "Listo para revisión" || selectedReport?.status === "PDF generado"
 
   useEffect(() => {
     setReportCards(data.directorReportCards)
   }, [data.directorReportCards])
+
+  useEffect(() => {
+    setDirectorObservation(selectedReport?.directorObservation ?? "")
+  }, [selectedReport?.directorObservation, selectedReport?.id])
 
   useEffect(() => {
     const studentId = searchParams.get("student")
@@ -123,19 +120,25 @@ export default function BoletinesPage() {
     setReportCards((current) =>
       current.map((report) =>
         report.id === selectedReport.id
-          ? { ...report, status, completedDate: report.completedDate, pdfUrl: pdfUrl ?? report.pdfUrl }
+          ? {
+              ...report,
+              status,
+              completedDate: report.completedDate,
+              directorObservation,
+              pdfUrl: pdfUrl ?? report.pdfUrl,
+            }
           : report,
       ),
     )
   }
 
-  const handleSendReport = async () => {
+  const handleGenerateReport = async () => {
     if (!selectedReport) return
     const response = await fetch("/api/report-cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "send",
+        action: "generate_pdf",
         reportCardId: selectedReport.id,
         directorObservation,
       }),
@@ -143,15 +146,21 @@ export default function BoletinesPage() {
 
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { error?: string } | null
-      toast.error(error?.error ?? "No se pudo enviar el boletin")
+      toast.error(error?.error ?? "No se pudo generar el PDF")
       return
     }
 
     const result = (await response.json().catch(() => null)) as { pdfUrl?: string } | null
-    updateSelectedReport("Enviado", result?.pdfUrl)
-    toast.success("Boletin enviado a padre/tutor", {
-      description: `Enviado a ${selectedReport.parentEmail}`
-    })
+    updateSelectedReport("PDF generado", result?.pdfUrl)
+
+    if (result?.pdfUrl) {
+      const link = document.createElement("a")
+      link.href = result.pdfUrl
+      link.download = `boletin-${selectedReport.studentName.replace(/,\s*/g, "-").replace(/\s+/g, "-").toLowerCase()}.pdf`
+      link.click()
+    }
+
+    toast.success("PDF generado y descargado")
   }
 
   const handleRequestRevision = async () => {
@@ -184,56 +193,80 @@ export default function BoletinesPage() {
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader 
-        title="Boletines pendientes de envio" 
+      <PageHeader
+        title="Generar boletines"
         breadcrumbs={[
           { label: "Director" },
-          { label: "Boletines" }
+          { label: "Boletines" },
+          { label: "Generar boletines" }
         ]}
       />
 
       {/* Split View */}
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-5 xl:h-[calc(100vh-200px)]">
+      <div className="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(280px,340px)_1fr] lg:h-[calc(100dvh-180px)]">
         {/* Left: List */}
-        <div className="xl:col-span-2">
-          <Card className="h-full">
-            <CardHeader>
-              <CardTitle className="text-base">Boletines listos</CardTitle>
-              <CardDescription>
-                {dynamicReportCardsData.length} boletines registrados
-                {showMissingEmailOnly ? " sin correo de tutor" : ""}
-              </CardDescription>
+        <div className="flex flex-col min-h-0">
+          <Card className="flex flex-col min-h-0 h-full">
+            <CardHeader className="shrink-0 pb-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-base">Alumnos</CardTitle>
+                  <CardDescription>
+                    {filteredReportCards.length} de {dynamicReportCardsData.length} boletines
+                  </CardDescription>
+                </div>
+              </div>
+              <Select value={selectedCourseFilter} onValueChange={setSelectedCourseFilter}>
+                <SelectTrigger className="h-8 text-sm">
+                  <SelectValue placeholder="Filtrar por curso" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">Todos los cursos</SelectItem>
+                  {data.courses.map(course => (
+                    <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </CardHeader>
-            <CardContent className="p-0">
-              <ScrollArea className="max-h-[360px] xl:h-[calc(100vh-340px)] xl:max-h-none">
+            <CardContent className="flex-1 min-h-0 p-0">
+              <ScrollArea className="h-[360px] lg:h-full">
                 <div className="space-y-1 p-2">
-                  {dynamicReportCardsData.map((report) => (
+                  {filteredReportCards.map((report) => (
                     <button
                       key={report.id}
                       onClick={() => setSelectedReportId(report.id)}
                       className={cn(
                         "w-full flex items-center gap-3 rounded-lg p-3 text-left transition-colors",
-                        selectedReportId === report.id 
-                          ? "bg-accent/10 border-l-2 border-accent" 
+                        selectedReportId === report.id
+                          ? "bg-accent/10 border-l-2 border-accent"
                           : "hover:bg-muted"
                       )}
                     >
-                      <Avatar className="size-9">
+                      <Avatar className="size-9 shrink-0">
                         <AvatarFallback className="bg-primary/10 text-primary text-sm">
                           {(report.studentName.split(",")[0] ?? report.studentName).slice(0, 2)}
                         </AvatarFallback>
                       </Avatar>
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{report.studentName}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {report.courseName} • Completado {report.completedDate}
+                        <p className="text-xs text-muted-foreground truncate">
+                          {report.courseName}
                         </p>
                       </div>
-                      {!report.parentEmail && (
-                        <div className="size-2 rounded-full bg-destructive" />
-                      )}
+                      <div className={cn(
+                        "size-2 rounded-full shrink-0",
+                        report.status === "PDF generado" ? "bg-success" :
+                        report.status === "Listo para revisión" ? "bg-accent" :
+                        report.status === "Requiere revisión" ? "bg-destructive" :
+                        "bg-muted-foreground/30"
+                      )} />
                     </button>
                   ))}
+                  {filteredReportCards.length === 0 && (
+                    <p className="py-8 text-center text-sm text-muted-foreground">
+                      No hay boletines para este curso.
+                    </p>
+                  )}
                 </div>
               </ScrollArea>
             </CardContent>
@@ -241,9 +274,9 @@ export default function BoletinesPage() {
         </div>
 
         {/* Right: Preview */}
-        <div className="xl:col-span-3">
+        <div className="min-h-0">
           {selectedReport ? (
-            <Card className="h-full flex flex-col">
+            <Card className="flex flex-col h-full min-h-[500px]">
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
@@ -257,24 +290,6 @@ export default function BoletinesPage() {
               </CardHeader>
               
               <CardContent className="flex-1 overflow-auto space-y-4">
-                {/* Missing Email Alert */}
-                {!selectedReport.parentEmail && (
-                  <Alert variant="destructive">
-                    <AlertCircle className="size-4" />
-                    <AlertTitle>Correo no registrado</AlertTitle>
-                    <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-                      <span>
-                        {selectedReport.studentName} no tiene correo de padre/tutor en el sistema. 
-                        El boletin no puede enviarse.
-                      </span>
-                      <Button variant="link" size="sm" className="text-destructive p-0 h-auto" disabled>
-                        Ver en Zoho CRM
-                        <ExternalLink className="size-3 ml-1" />
-                      </Button>
-                    </AlertDescription>
-                  </Alert>
-                )}
-
                 {/* Report Preview */}
                 <div className="rounded-lg border">
                   {/* Student Info */}
@@ -425,11 +440,11 @@ export default function BoletinesPage() {
 
                 <Button 
                   size="sm" 
-                  onClick={handleSendReport}
-                  disabled={!canSendSelectedReport}
+                  onClick={handleGenerateReport}
+                  disabled={!canGenerateSelectedReport}
                 >
-                  <Send className="size-4 mr-2" />
-                  Confirmar y enviar boletin
+                  <Download className="size-4 mr-2" />
+                  Generar PDF
                 </Button>
               </div>
             </Card>

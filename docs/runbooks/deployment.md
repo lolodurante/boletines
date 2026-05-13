@@ -7,7 +7,6 @@
 - `DATABASE_URL` configurada con el pooler de Supabase.
 - `DIRECT_URL` disponible para migraciones/operaciones administrativas.
 - Email real habilitado solo si hay provider validado.
-- Zoho real habilitado solo con modulos y campos confirmados.
 
 ## Validacion previa
 
@@ -21,4 +20,3 @@
 
 - Enviar emails reales desde ambientes no productivos.
 - Generar PDFs con diseno no aprobado.
-- Subir archivos al modulo Zoho incorrecto.

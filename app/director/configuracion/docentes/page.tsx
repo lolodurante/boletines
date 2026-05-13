@@ -36,11 +36,12 @@ import {
   Alert,
   AlertDescription,
 } from "@/components/ui/alert"
-import { 
-  Plus, 
+import { Checkbox } from "@/components/ui/checkbox"
+import {
+  Plus,
   Trash2,
-  Cloud,
-  Info
+  Database,
+  Info,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -53,12 +54,12 @@ interface Assignment {
 }
 
 export default function DocentesPage() {
-  const { data } = usePlatformData()
+  const { data, error } = usePlatformData()
   const [selectedTeacherId, setSelectedTeacherId] = useState(data.teachers[0]?.id)
   const [assignments, setAssignments] = useState(data.courseAssignments)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newCourseId, setNewCourseId] = useState("")
-  const [newSubjectId, setNewSubjectId] = useState("")
+  const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([])
 
   const activePeriod = data.periods.find(period => period.status === "Activo") ?? data.periods[0]
   const selectedTeacher = data.teachers.find(t => t.id === selectedTeacherId)
@@ -75,29 +76,16 @@ export default function DocentesPage() {
   )
 
   const handleAddAssignment = async () => {
-    if (!newCourseId || !newSubjectId || !selectedTeacher || !activePeriod) return
-
-    // Check if assignment already exists
-    const exists = assignments.some(a => 
-      a.teacherId === selectedTeacher.id && 
-      a.courseId === newCourseId && 
-      a.subjectId === newSubjectId &&
-      a.periodId === activePeriod.id
-    )
-
-    if (exists) {
-      toast.error("Esta asignacion ya existe")
-      return
-    }
+    if (!newCourseId || selectedSubjectIds.length === 0 || !selectedTeacher || !activePeriod) return
 
     const response = await fetch("/api/course-assignments", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "add",
+        action: "bulk-add",
         teacherId: selectedTeacher.id,
         courseId: newCourseId,
-        subjectId: newSubjectId,
+        subjectIds: selectedSubjectIds,
         periodId: activePeriod.id,
       }),
     })
@@ -108,20 +96,25 @@ export default function DocentesPage() {
       return
     }
 
-    setAssignments([
-      ...assignments,
-      {
+    const newAssignments = selectedSubjectIds
+      .filter(subjectId => !assignments.some(a =>
+        a.teacherId === selectedTeacher.id &&
+        a.courseId === newCourseId &&
+        a.subjectId === subjectId &&
+        a.periodId === activePeriod.id
+      ))
+      .map(subjectId => ({
         teacherId: selectedTeacher.id,
         courseId: newCourseId,
-        subjectId: newSubjectId,
-        periodId: activePeriod.id
-      }
-    ])
+        subjectId,
+        periodId: activePeriod.id,
+      }))
 
-    toast.success("Asignacion agregada")
+    setAssignments([...assignments, ...newAssignments])
+    toast.success(`${newAssignments.length === 1 ? "Asignacion agregada" : `${newAssignments.length} asignaciones agregadas`}`)
     setIsDialogOpen(false)
     setNewCourseId("")
-    setNewSubjectId("")
+    setSelectedSubjectIds([])
   }
 
   const handleRemoveAssignment = async (courseId: string, subjectId: string) => {
@@ -206,29 +199,33 @@ export default function DocentesPage() {
         ]}
       />
 
-      {/* Zoho Sync Banner */}
       <Alert className="border-accent/50 bg-accent/5">
         <Info className="size-4 text-accent" />
         <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          Los datos de docentes y alumnos se sincronizan automaticamente desde Zoho CRM. 
-          Para agregar o eliminar docentes, usa Zoho CRM directamente.
+          Los datos de docentes, alumnos y asignaciones se administran desde la base de datos de la app.
         </AlertDescription>
       </Alert>
 
-      <div className="grid grid-cols-1 gap-6 xl:grid-cols-3 xl:h-[calc(100vh-280px)]">
+      {error && (
+        <Alert variant="destructive">
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <div className="grid grid-cols-1 gap-6 lg:h-[calc(100dvh-260px)] lg:min-h-[520px] lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
         {/* Left: Teacher List */}
-        <Card>
-          <CardHeader className="pb-3">
+        <Card className="min-h-0 overflow-hidden">
+          <CardHeader className="shrink-0 pb-3">
             <div className="flex items-center justify-between">
               <CardTitle className="text-base">Docentes</CardTitle>
               <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                <Cloud className="size-3 text-accent" />
-                <span>Sincronizado</span>
+                <Database className="size-3 text-accent" />
+                <span>Base local</span>
               </div>
             </div>
           </CardHeader>
-          <CardContent className="p-0">
-            <ScrollArea className="max-h-[320px] xl:h-[calc(100vh-400px)] xl:max-h-none">
+          <CardContent className="min-h-0 flex-1 p-0">
+            <ScrollArea className="h-[360px] max-h-[45vh] lg:h-full lg:max-h-none">
               <div className="space-y-1 px-2">
                 {data.teachers.map((teacher) => (
                   <button
@@ -266,10 +263,10 @@ export default function DocentesPage() {
         </Card>
 
         {/* Right: Teacher Detail */}
-        <Card className="flex flex-col xl:col-span-2">
+        <Card className="min-h-[420px] overflow-hidden lg:min-h-0">
           {selectedTeacher ? (
             <>
-              <CardHeader>
+              <CardHeader className="shrink-0">
                 <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex min-w-0 items-center gap-4">
                     <Avatar className="size-12">
@@ -281,8 +278,8 @@ export default function DocentesPage() {
                       <h2 className="text-xl font-semibold">{selectedTeacher.name}</h2>
                       <p className="break-all text-sm text-muted-foreground">{selectedTeacher.email}</p>
                       <div className="flex items-center gap-1 text-xs text-muted-foreground mt-1">
-                        <Cloud className="size-3 text-accent" />
-                        <span>Sincronizado desde Zoho CRM</span>
+                        <Database className="size-3 text-accent" />
+                        <span>Gestionado en la app</span>
                       </div>
                     </div>
                   </div>
@@ -297,9 +294,9 @@ export default function DocentesPage() {
                 </div>
               </CardHeader>
 
-              <Separator />
+              <Separator className="shrink-0" />
 
-              <CardContent className="flex-1 overflow-auto py-4">
+              <CardContent className="min-h-0 flex-1 overflow-auto py-4">
                 <div className="space-y-4">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                     <h3 className="font-medium">
@@ -312,20 +309,26 @@ export default function DocentesPage() {
                       <DialogTrigger asChild>
                         <Button size="sm">
                           <Plus className="size-4 mr-2" />
-                          Asignar curso y materia
+                          Asignar curso y materias
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
                           <DialogTitle>Nueva asignacion</DialogTitle>
                           <DialogDescription>
-                            Asigna un curso y materia a {selectedTeacher.name}
+                            Asigna un curso y sus materias a {selectedTeacher.name}
                           </DialogDescription>
                         </DialogHeader>
                         <div className="space-y-4 py-4">
                           <div className="space-y-2">
                             <label className="text-sm font-medium">Curso</label>
-                            <Select value={newCourseId} onValueChange={setNewCourseId}>
+                            <Select
+                              value={newCourseId}
+                              onValueChange={(val) => {
+                                setNewCourseId(val)
+                                setSelectedSubjectIds([])
+                              }}
+                            >
                               <SelectTrigger>
                                 <SelectValue placeholder="Seleccionar curso" />
                               </SelectTrigger>
@@ -338,28 +341,69 @@ export default function DocentesPage() {
                               </SelectContent>
                             </Select>
                           </div>
-                          <div className="space-y-2">
-                            <label className="text-sm font-medium">Materia</label>
-                            <Select value={newSubjectId} onValueChange={setNewSubjectId}>
-                              <SelectTrigger>
-                                <SelectValue placeholder="Seleccionar materia" />
-                              </SelectTrigger>
-                              <SelectContent>
-                                {data.subjects.map(subject => (
-                                  <SelectItem key={subject.id} value={subject.id}>
-                                    {subject.name}
-                                  </SelectItem>
-                                ))}
-                              </SelectContent>
-                            </Select>
-                          </div>
+
+                          {newCourseId && (() => {
+                            const available = data.subjects.filter(subject =>
+                              !assignments.some(a =>
+                                a.teacherId === selectedTeacher.id &&
+                                a.courseId === newCourseId &&
+                                a.subjectId === subject.id &&
+                                a.periodId === activePeriod?.id
+                              )
+                            )
+                            const allSelected = available.length > 0 && available.every(s => selectedSubjectIds.includes(s.id))
+
+                            return (
+                              <div className="space-y-2">
+                                <label className="text-sm font-medium">Materias</label>
+                                {available.length === 0 ? (
+                                  <p className="text-sm text-muted-foreground">Todas las materias ya estan asignadas para este curso.</p>
+                                ) : (
+                                  <ScrollArea className="h-48 rounded-md border p-3">
+                                    <div className="space-y-2">
+                                      <div className="flex items-center gap-2 pb-2 border-b">
+                                        <Checkbox
+                                          id="select-all"
+                                          checked={allSelected}
+                                          onCheckedChange={(checked) => {
+                                            setSelectedSubjectIds(checked ? available.map(s => s.id) : [])
+                                          }}
+                                        />
+                                        <label htmlFor="select-all" className="text-sm font-medium cursor-pointer">
+                                          Seleccionar todas
+                                        </label>
+                                      </div>
+                                      {available.map(subject => (
+                                        <div key={subject.id} className="flex items-center gap-2">
+                                          <Checkbox
+                                            id={subject.id}
+                                            checked={selectedSubjectIds.includes(subject.id)}
+                                            onCheckedChange={(checked) => {
+                                              setSelectedSubjectIds(prev =>
+                                                checked
+                                                  ? [...prev, subject.id]
+                                                  : prev.filter(id => id !== subject.id)
+                                              )
+                                            }}
+                                          />
+                                          <label htmlFor={subject.id} className="text-sm cursor-pointer">
+                                            {subject.name}
+                                          </label>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </ScrollArea>
+                                )}
+                              </div>
+                            )
+                          })()}
                         </div>
                         <DialogFooter>
-                          <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
+                          <Button variant="outline" onClick={() => { setIsDialogOpen(false); setNewCourseId(""); setSelectedSubjectIds([]) }}>
                             Cancelar
                           </Button>
-                          <Button onClick={handleAddAssignment} disabled={!newCourseId || !newSubjectId}>
-                            Guardar
+                          <Button onClick={handleAddAssignment} disabled={!newCourseId || selectedSubjectIds.length === 0}>
+                            {selectedSubjectIds.length > 0 ? `Guardar (${selectedSubjectIds.length})` : "Guardar"}
                           </Button>
                         </DialogFooter>
                       </DialogContent>
@@ -402,7 +446,7 @@ export default function DocentesPage() {
                       <p className="text-sm text-muted-foreground">
                         No hay asignaciones para este periodo
                       </p>
-                      <Button variant="outline" size="sm" className="mt-2" onClick={() => setIsDialogOpen(true)}>
+                      <Button variant="outline" size="sm" className="mt-2" onClick={() => { setNewCourseId(""); setSelectedSubjectIds([]); setIsDialogOpen(true) }}>
                         <Plus className="size-4 mr-2" />
                         Agregar asignacion
                       </Button>

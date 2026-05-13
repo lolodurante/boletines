@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 import { prisma } from "@/lib/db/client"
+import { coursePartsFromId } from "@/lib/academic-course"
 import { logWarning } from "@/lib/logger"
 import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
@@ -12,6 +13,13 @@ const assignmentActionSchema = z.discriminatedUnion("action", [
     teacherId: z.string().min(1),
     courseId: z.string().min(1),
     subjectId: z.string().min(1),
+    periodId: z.string().min(1),
+  }),
+  z.object({
+    action: z.literal("bulk-add"),
+    teacherId: z.string().min(1),
+    courseId: z.string().min(1),
+    subjectIds: z.array(z.string().min(1)).min(1),
     periodId: z.string().min(1),
   }),
   z.object({
@@ -28,16 +36,6 @@ function hasConfiguredDatabase() {
   return Boolean(url && !url.includes("localhost:5432/boletines_labarden"))
 }
 
-function courseParts(courseId: string) {
-  const match = /^c(.+)([a-z])$/i.exec(courseId)
-  if (!match) return null
-
-  return {
-    grade: match[1]!,
-    division: match[2]!.toUpperCase(),
-  }
-}
-
 export async function POST(request: Request) {
   const auth = await requireApiDirectorOrAdmin()
   if (auth.response) return auth.response
@@ -52,12 +50,26 @@ export async function POST(request: Request) {
   }
 
   const input = parsed.data
-  const course = courseParts(input.courseId)
+  const course = coursePartsFromId(input.courseId)
   if (!course) {
     return NextResponse.json({ error: "Curso invalido" }, { status: 400 })
   }
 
   try {
+    if (input.action === "bulk-add") {
+      await prisma.courseAssignment.createMany({
+        data: input.subjectIds.map((subjectId) => ({
+          teacherId: input.teacherId,
+          subjectId,
+          periodId: input.periodId,
+          grade: course.grade,
+          division: course.division,
+        })),
+        skipDuplicates: true,
+      })
+      return NextResponse.json({ ok: true, persisted: true })
+    }
+
     if (input.action === "remove") {
       await prisma.courseAssignment.deleteMany({
         where: {

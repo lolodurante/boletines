@@ -24,7 +24,7 @@ import {
 } from "@/components/ui/table"
 import { 
   Eye, 
-  Send, 
+  FileText,
   MessageSquare,
   Search,
   CheckCircle2,
@@ -41,7 +41,7 @@ interface HistorialRow {
   studentName: string
   courseName: string
   periodName: string
-  sentDate: string | null
+  generatedDate: string | null
   status: ReportStatus
   pdfUrl?: string
 }
@@ -64,27 +64,27 @@ export default function HistorialPage() {
   })
 
   // Calculate summary counts
-  const sentCount = filteredData.filter(r => r.status === "Enviado").length
-  const pendingCount = filteredData.filter(r => r.status === "Listo para revisión" || r.status === "Pendiente de envío").length
-  const errorCount = filteredData.filter(r => r.status === "Requiere revisión" || r.status === "Sin correo registrado").length
+  const generatedCount = filteredData.filter(r => r.status === "PDF generado").length
+  const pendingCount = filteredData.filter(r => r.status === "Listo para revisión").length
+  const revisionCount = filteredData.filter(r => r.status === "Requiere revisión").length
 
-  const handleResend = async (row: HistorialRow) => {
+  const handleGenerate = async (row: HistorialRow) => {
     const response = await fetch("/api/report-cards", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        action: "send",
+        action: "generate_pdf",
         reportCardId: row.id,
       }),
     })
 
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { error?: string } | null
-      toast.error(error?.error ?? "No se pudo reenviar el boletin")
+      toast.error(error?.error ?? "No se pudo generar el PDF")
       return
     }
 
-    toast.success("Boletin reenviado")
+    toast.success("PDF generado")
   }
 
   return (
@@ -100,7 +100,7 @@ export default function HistorialPage() {
           <div className="flex flex-wrap items-center gap-3 text-sm">
             <span className="flex items-center gap-1">
               <CheckCircle2 className="size-4 text-success" />
-              Enviados: <strong>{sentCount}</strong>
+              PDF generado: <strong>{generatedCount}</strong>
             </span>
             <span className="flex items-center gap-1">
               <AlertCircle className="size-4 text-warning" />
@@ -108,7 +108,7 @@ export default function HistorialPage() {
             </span>
             <span className="flex items-center gap-1">
               <AlertCircle className="size-4 text-destructive" />
-              Con errores: <strong>{errorCount}</strong>
+              En revisión: <strong>{revisionCount}</strong>
             </span>
           </div>
         }
@@ -161,10 +161,8 @@ export default function HistorialPage() {
                 <SelectItem value="all">Todos</SelectItem>
                 <SelectItem value="No listo">No listo</SelectItem>
                 <SelectItem value="Listo para revisión">Listo para revision</SelectItem>
-                <SelectItem value="Enviado">Enviado</SelectItem>
-                <SelectItem value="Pendiente de envío">Pendiente</SelectItem>
+                <SelectItem value="PDF generado">PDF generado</SelectItem>
                 <SelectItem value="Requiere revisión">Requiere revision</SelectItem>
-                <SelectItem value="Sin correo registrado">Sin correo</SelectItem>
               </SelectContent>
             </Select>
           </div>
@@ -186,7 +184,7 @@ export default function HistorialPage() {
       {/* Data Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Historial de envios</CardTitle>
+          <CardTitle>Historial de boletines</CardTitle>
           <CardDescription>
             {filteredData.length} registros encontrados
           </CardDescription>
@@ -198,7 +196,7 @@ export default function HistorialPage() {
                 <TableHead>Alumno</TableHead>
                 <TableHead>Curso</TableHead>
                 <TableHead>Periodo</TableHead>
-                <TableHead>Fecha de envio</TableHead>
+                <TableHead>Fecha de PDF</TableHead>
                 <TableHead>Estado</TableHead>
                 <TableHead className="text-right">Acciones</TableHead>
               </TableRow>
@@ -210,36 +208,36 @@ export default function HistorialPage() {
                   <TableCell>{row.courseName}</TableCell>
                   <TableCell>{row.periodName}</TableCell>
                   <TableCell className="text-muted-foreground">
-                    {row.sentDate || "—"}
+                    {row.generatedDate || "—"}
                   </TableCell>
                   <TableCell>
                     <StatusBadge status={row.status} />
                   </TableCell>
                   <TableCell className="text-right">
-                    <div className="flex items-center justify-end gap-1">
+                    <div className="flex items-center justify-end gap-2">
                       {row.pdfUrl ? (
-                        <Button variant="ghost" size="icon" className="size-8" asChild>
+                        <Button variant="outline" size="sm" asChild>
                           <Link href={row.pdfUrl} target="_blank" rel="noreferrer">
-                            <Eye className="size-4" />
-                            <span className="sr-only">Ver PDF</span>
+                            <Eye className="size-4 mr-1.5" />
+                            Ver PDF
                           </Link>
                         </Button>
                       ) : (
-                        <Button variant="ghost" size="icon" className="size-8" disabled>
-                          <Eye className="size-4" />
-                          <span className="sr-only">Ver PDF no disponible</span>
+                        <Button variant="outline" size="sm" disabled>
+                          <Eye className="size-4 mr-1.5" />
+                          Ver PDF
                         </Button>
                       )}
-                      {row.status !== "Sin correo registrado" && (
-                        <Button variant="ghost" size="icon" className="size-8" onClick={() => handleResend(row)}>
-                          <Send className="size-4" />
-                          <span className="sr-only">Reenviar</span>
+                      {row.status === "Listo para revisión" && (
+                        <Button variant="outline" size="sm" onClick={() => handleGenerate(row)}>
+                          <FileText className="size-4 mr-1.5" />
+                          Generar PDF
                         </Button>
                       )}
-                      <Button variant="ghost" size="icon" className="size-8" asChild>
+                      <Button variant="ghost" size="sm" asChild>
                         <Link href={`/director/boletines?student=${row.studentId}`}>
-                          <MessageSquare className="size-4" />
-                          <span className="sr-only">Agregar observacion</span>
+                          <MessageSquare className="size-4 mr-1.5" />
+                          Revisar
                         </Link>
                       </Button>
                     </div>

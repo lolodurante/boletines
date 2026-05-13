@@ -10,7 +10,6 @@ export const studentSchema = z.object({
   grade: z.string().min(1),
   division: z.string().min(1),
   familyEmail: optionalEmailSchema,
-  zohoId: idSchema.optional(),
   status: studentStatusSchema,
 })
 

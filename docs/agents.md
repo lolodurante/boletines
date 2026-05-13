@@ -13,14 +13,13 @@ Este repositorio se trabaja agent-first. Cualquier agente debe leer primero `doc
 - Actualizar docs cuando se agregan features, contratos, estados o decisiones.
 - Correr validaciones antes de terminar.
 - Mantener TypeScript estricto.
-- Usar Zod para validar inputs externos, server actions, API routes, webhooks y respuestas de Zoho.
+- Usar Zod para validar inputs externos, server actions, API routes y webhooks.
 - Separar UI, dominio, servicios y persistencia.
 - No mezclar logica de negocio en componentes visuales.
 - No hardcodear datos sensibles.
 - No usar `any` salvo justificacion documentada en el PR.
 - No crear archivos gigantes; dividir por responsabilidad cuando un archivo deja de ser facil de revisar.
-- No tocar integracion Zoho real hasta tener variables, nombres de modulos, campos y contratos confirmados.
-- Usar mocks/stubs para Zoho, email y PDF durante desarrollo local y tests.
+- Usar mocks/stubs para email y PDF durante desarrollo local y tests.
 
 ## Checklist final obligatorio
 

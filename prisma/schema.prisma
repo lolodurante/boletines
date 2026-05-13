@@ -59,15 +59,9 @@ enum ReportDeliveryStatus {
   BLOCKED
 }
 
-enum ZohoUploadStatus {
+enum ReportCardPdfStatus {
   PENDING
-  UPLOADED
-  FAILED
-  SKIPPED
-}
-
-enum ZohoSyncStatus {
-  SUCCESS
+  GENERATED
   FAILED
   SKIPPED
 }
@@ -79,7 +73,6 @@ model User {
   email      String     @unique
   role       UserRole
   status     UserStatus @default(ACTIVE)
-  zohoId     String?    @unique @map("zoho_id")
   createdAt  DateTime   @default(now()) @map("created_at")
   updatedAt  DateTime   @updatedAt @map("updated_at")
 
@@ -97,7 +90,6 @@ model Student {
   grade       String
   division    String
   familyEmail String?       @map("family_email")
-  zohoId      String?       @unique @map("zoho_id")
   status      StudentStatus @default(ACTIVE)
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
@@ -110,10 +102,22 @@ model Student {
   @@map("students")
 }
 
+model Course {
+  id        String   @id @default(uuid()) @db.Uuid
+  grade     String
+  division  String
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([grade, division])
+  @@index([active])
+  @@map("courses")
+}
+
 model Teacher {
   id        String   @id @default(uuid()) @db.Uuid
   userId    String   @unique @map("user_id") @db.Uuid
-  zohoId    String?  @unique @map("zoho_id")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -290,7 +294,7 @@ model ReportCard {
   directorObservation String?          @map("director_observation")
   pdfUrl              String?          @map("pdf_url")
   sentAt              DateTime?        @map("sent_at")
-  zohoUploadStatus    ZohoUploadStatus @default(PENDING) @map("zoho_upload_status")
+  pdfStatus           ReportCardPdfStatus @default(PENDING) @map("pdf_status")
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
@@ -302,7 +306,7 @@ model ReportCard {
   @@index([studentId])
   @@index([periodId])
   @@index([status])
-  @@index([zohoUploadStatus])
+  @@index([pdfStatus])
   @@map("report_cards")
 }
 
@@ -321,21 +325,4 @@ model ReportDelivery {
   @@index([reportCardId])
   @@index([status])
   @@map("report_deliveries")
-}
-
-model ZohoSyncLog {
-  id           String         @id @default(uuid()) @db.Uuid
-  entityType   String         @map("entity_type")
-  entityId     String         @map("entity_id")
-  zohoId       String?        @map("zoho_id")
-  action       String
-  status       ZohoSyncStatus
-  errorMessage String?        @map("error_message")
-  createdAt    DateTime       @default(now()) @map("created_at")
-
-  @@index([entityType, entityId])
-  @@index([zohoId])
-  @@index([status])
-  @@index([createdAt])
-  @@map("zoho_sync_logs")
 }

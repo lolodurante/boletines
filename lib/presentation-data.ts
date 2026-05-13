@@ -45,6 +45,7 @@ export interface DirectorReportCardData {
   completedDate: string
   status: ReportStatus
   parentEmail: string | null
+  directorObservation?: string
   pdfUrl?: string
   grades: Array<{
     subjectName: string
@@ -61,7 +62,7 @@ export interface ReportHistoryRow {
   studentName: string
   courseName: string
   periodName: string
-  sentDate: string | null
+  generatedDate: string | null
   status: ReportStatus
   pdfUrl?: string
 }
@@ -158,12 +159,12 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
 
 function buildReportHistory(): ReportHistoryRow[] {
   return reportCards.map((reportCard) => ({
-    id: `history-${reportCard.id}`,
+    id: reportCard.id,
     studentId: reportCard.studentId,
     studentName: students.find((student) => student.id === reportCard.studentId)?.name ?? "Desconocido",
     courseName: courseNameForStudent(reportCard.studentId),
     periodName: periods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
-    sentDate: reportCard.sentDate ?? null,
+    generatedDate: reportCard.generatedDate ?? null,
     status: reportCard.status,
     pdfUrl: reportCard.pdfUrl,
   }))

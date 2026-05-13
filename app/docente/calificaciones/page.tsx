@@ -1,6 +1,6 @@
 "use client"
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/status-badge"
@@ -10,9 +10,7 @@ import { usePlatformData } from "@/lib/use-platform-data"
 import type { EvaluationStatus } from "@/lib/data"
 import { getAssignmentProgress, getProgressPercentage } from "@/lib/evaluation-metrics"
 
-interface CourseCard {
-  courseId: string
-  courseName: string
+interface SubjectRow {
   subjectId: string
   subjectName: string
   periodId: string
@@ -21,79 +19,115 @@ interface CourseCard {
   status: EvaluationStatus
 }
 
+interface CourseGroup {
+  courseId: string
+  courseName: string
+  subjects: SubjectRow[]
+  totalStudentSlots: number
+  totalEvaluated: number
+}
+
 export default function CalificacionesPage() {
   const { data, isLoading } = usePlatformData()
   const activePeriod = data.periods.find(period => period.status === "Activo") ?? data.periods[0]
   const assignments = activePeriod
-    ? data.courseAssignments.filter(assignment => assignment.teacherId === data.currentTeacher.id && assignment.periodId === activePeriod.id)
+    ? data.courseAssignments.filter(a => a.teacherId === data.currentTeacher.id && a.periodId === activePeriod.id)
     : []
-  const courseCards: CourseCard[] = assignments.map((assignment) => {
+
+  const courseGroups: CourseGroup[] = []
+  for (const assignment of assignments) {
     const course = data.courses.find(item => item.id === assignment.courseId)
     const subject = data.subjects.find(item => item.id === assignment.subjectId)
     const progress = getAssignmentProgress(data, assignment)
 
-    return {
-      courseId: assignment.courseId,
-      courseName: course?.name || "—",
+    let group = courseGroups.find(g => g.courseId === assignment.courseId)
+    if (!group) {
+      group = {
+        courseId: assignment.courseId,
+        courseName: course?.name ?? "—",
+        subjects: [],
+        totalStudentSlots: 0,
+        totalEvaluated: 0,
+      }
+      courseGroups.push(group)
+    }
+
+    group.subjects.push({
       subjectId: assignment.subjectId,
-      subjectName: subject?.name || "—",
+      subjectName: subject?.name ?? "—",
       periodId: assignment.periodId,
       studentCount: progress.studentCount,
       evaluatedCount: progress.completedCount,
-      status: progress.status
-    }
-  })
+      status: progress.status,
+    })
+    group.totalStudentSlots += progress.studentCount
+    group.totalEvaluated += progress.completedCount
+  }
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader 
-        title="Calificaciones" 
+      <PageHeader
+        title="Calificaciones"
         breadcrumbs={[
           { label: "Docente" },
-          { label: "Calificaciones" }
+          { label: "Calificaciones" },
         ]}
       />
 
       <p className="text-muted-foreground">
-        Selecciona un curso para cargar o editar las calificaciones del periodo {activePeriod?.name ?? "actual"}.
+        Selecciona una materia para cargar o editar las calificaciones del periodo {activePeriod?.name ?? "actual"}.
       </p>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-        {courseCards.map((course) => {
-          const progressPercentage = getProgressPercentage(course.evaluatedCount, course.studentCount)
-          
+      <div className="flex flex-col gap-4">
+        {courseGroups.map((group) => {
+          const overallPercentage = getProgressPercentage(group.totalEvaluated, group.totalStudentSlots)
+          const allDone = group.subjects.every(s => s.status === "Completo")
+          const anyInProgress = group.subjects.some(s => s.status === "En progreso")
+          const courseStatus: EvaluationStatus = allDone ? "Completo" : anyInProgress ? "En progreso" : "Sin iniciar"
+
           return (
-            <Card key={`${course.courseId}-${course.subjectId}`} className="hover:shadow-md transition-shadow">
-              <CardHeader className="pb-2">
-                <div className="flex items-start justify-between">
-                  <div>
-                    <CardTitle className="text-lg">{course.courseName}</CardTitle>
-                    <CardDescription>{course.subjectName}</CardDescription>
-                  </div>
-                  <StatusBadge status={course.status} />
+            <Card key={group.courseId}>
+              <CardHeader className="pb-3">
+                <div className="flex items-center justify-between">
+                  <CardTitle className="text-lg">{group.courseName}</CardTitle>
+                  <StatusBadge status={courseStatus} />
                 </div>
+                <div className="flex items-center justify-between text-sm text-muted-foreground">
+                  <span>{group.subjects.length} {group.subjects.length === 1 ? "materia" : "materias"}</span>
+                  <span>{Math.round(overallPercentage)}% completado</span>
+                </div>
+                <Progress value={overallPercentage} className="h-1.5" />
               </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between text-sm">
-                    <span className="text-muted-foreground">
-                      {course.evaluatedCount}/{course.studentCount} alumnos
-                    </span>
-                    <span className="font-medium">{Math.round(progressPercentage)}%</span>
-                  </div>
-                  <Progress value={progressPercentage} className="h-2" />
+              <CardContent className="pt-0">
+                <div className="divide-y">
+                  {group.subjects.map((subject) => {
+                    const pct = getProgressPercentage(subject.evaluatedCount, subject.studentCount)
+                    return (
+                      <div key={subject.subjectId} className="flex items-center justify-between py-2.5 gap-4">
+                        <div className="flex items-center gap-3 min-w-0">
+                          <StatusBadge status={subject.status} />
+                          <span className="text-sm truncate">{subject.subjectName}</span>
+                        </div>
+                        <div className="flex items-center gap-3 shrink-0">
+                          <span className="text-xs text-muted-foreground hidden sm:block">
+                            {subject.evaluatedCount}/{subject.studentCount} alumnos · {Math.round(pct)}%
+                          </span>
+                          <Button size="sm" variant="outline" asChild>
+                            <Link href={`/docente/calificaciones/${group.courseId}/${subject.subjectId}?period=${subject.periodId}`}>
+                              {subject.status === "Sin iniciar" ? "Comenzar" : "Continuar"}
+                            </Link>
+                          </Button>
+                        </div>
+                      </div>
+                    )
+                  })}
                 </div>
-                
-                <Button className="w-full" asChild>
-                  <Link href={`/docente/calificaciones/${course.courseId}/${course.subjectId}?period=${course.periodId}`}>
-                    {course.status === "Sin iniciar" ? "Comenzar carga" : "Continuar"}
-                  </Link>
-                </Button>
               </CardContent>
             </Card>
           )
         })}
-        {!isLoading && courseCards.length === 0 && (
+
+        {!isLoading && courseGroups.length === 0 && (
           <Card>
             <CardContent className="py-6 text-sm text-muted-foreground">
               No tenes cursos para cargar en el periodo actual.

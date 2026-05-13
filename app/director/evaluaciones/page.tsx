@@ -1,11 +1,10 @@
 "use client"
 
 import { useState } from "react"
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
+import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/status-badge"
-import { GradeBadge } from "@/components/grade-badge"
 import { PageHeader } from "@/components/page-header"
 import {
   Select,
@@ -15,14 +14,6 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table"
-import {
   Sheet,
   SheetContent,
   SheetDescription,
@@ -30,243 +21,248 @@ import {
   SheetTitle,
   SheetTrigger,
 } from "@/components/ui/sheet"
-import { Separator } from "@/components/ui/separator"
-import { Download, Eye } from "lucide-react"
-import Link from "next/link"
+import { Avatar, AvatarFallback } from "@/components/ui/avatar"
 import { usePlatformData } from "@/lib/use-platform-data"
-import type { EvaluationStatus, GradeLevel } from "@/lib/data"
+import {
+  getAssignmentProgress,
+  getProgressPercentage,
+  getStatusFromProgress,
+} from "@/lib/evaluation-metrics"
+import type { EvaluationStatus } from "@/lib/data"
 
-interface EvaluationRow {
-  id: string
-  studentId: string
-  studentName: string
-  courseId: string
-  courseName: string
-  teacherId: string
-  teacherName: string
-  subjectId: string
-  subjectName: string
-  status: EvaluationStatus
-  lastUpdated: string
-  grades: Record<string, string>
+const STATUS_ORDER: Record<EvaluationStatus, number> = {
+  "Sin iniciar": 0,
+  "En progreso": 1,
+  "Completo": 2,
 }
 
-export default function EvaluacionesPage() {
+export default function SeguimientoPage() {
   const { data } = usePlatformData()
-  const [selectedPeriod, setSelectedPeriod] = useState("all")
-  const [selectedCourse, setSelectedCourse] = useState("all")
+  const [selectedPeriodId, setSelectedPeriodId] = useState(
+    data.periods.find(p => p.status === "Activo")?.id ?? data.periods[0]?.id ?? "all"
+  )
+  const [selectedCourseId, setSelectedCourseId] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
-  const [selectedEvaluation, setSelectedEvaluation] = useState<EvaluationRow | null>(null)
-  const evaluations = data.directorEvaluationRows
 
-  // Filter evaluations
-  const filteredEvaluations = evaluations.filter(e => {
-    const evaluation = data.evaluations.find(item => item.id === e.id)
-    if (selectedPeriod !== "all" && evaluation?.periodId !== selectedPeriod) return false
-    if (selectedCourse !== "all" && e.courseId !== selectedCourse) return false
-    if (selectedStatus !== "all" && e.status !== selectedStatus) return false
+  const activePeriodId = selectedPeriodId === "all" ? null : selectedPeriodId
+
+  const filteredAssignments = data.courseAssignments.filter(a => {
+    if (activePeriodId && a.periodId !== activePeriodId) return false
+    if (selectedCourseId !== "all" && a.courseId !== selectedCourseId) return false
     return true
   })
 
-  const handleExport = () => {
-    const headers = ["Alumno", "Curso", "Docente", "Materia", "Estado", "Ultima actualizacion"]
-    const rows = filteredEvaluations.map((evaluation) => [
-      evaluation.studentName,
-      evaluation.courseName,
-      evaluation.teacherName,
-      evaluation.subjectName,
-      evaluation.status,
-      evaluation.lastUpdated,
-    ])
-    const escapeCsv = (value: string) => `"${value.replaceAll('"', '""')}"`
-    const csv = [headers, ...rows].map((row) => row.map(escapeCsv).join(",")).join("\n")
-    const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }))
-    const link = document.createElement("a")
-    link.href = url
-    link.download = "evaluaciones-directivos.csv"
-    link.click()
-    URL.revokeObjectURL(url)
+  // Group assignments by teacher
+  const teacherMap = new Map<string, {
+    teacherId: string
+    teacherName: string
+    assignments: Array<{
+      courseId: string
+      courseName: string
+      subjectId: string
+      subjectName: string
+      studentCount: number
+      completedCount: number
+      status: EvaluationStatus
+    }>
+    totalSlots: number
+    completedSlots: number
+  }>()
+
+  for (const assignment of filteredAssignments) {
+    const teacher = data.teachers.find(t => t.id === assignment.teacherId)
+    if (!teacher) continue
+    const course = data.courses.find(c => c.id === assignment.courseId)
+    const subject = data.subjects.find(s => s.id === assignment.subjectId)
+    const progress = getAssignmentProgress(data, assignment)
+
+    if (!teacherMap.has(teacher.id)) {
+      teacherMap.set(teacher.id, {
+        teacherId: teacher.id,
+        teacherName: teacher.name,
+        assignments: [],
+        totalSlots: 0,
+        completedSlots: 0,
+      })
+    }
+    const entry = teacherMap.get(teacher.id)!
+    entry.assignments.push({
+      courseId: assignment.courseId,
+      courseName: course?.name ?? "—",
+      subjectId: assignment.subjectId,
+      subjectName: subject?.name ?? "—",
+      studentCount: progress.studentCount,
+      completedCount: progress.completedCount,
+      status: progress.status,
+    })
+    entry.totalSlots += progress.studentCount
+    entry.completedSlots += progress.completedCount
   }
+
+  let teacherRows = Array.from(teacherMap.values()).map(row => ({
+    ...row,
+    overallStatus: getStatusFromProgress(row.completedSlots, row.totalSlots),
+  }))
+
+  // Filter by status
+  if (selectedStatus !== "all") {
+    teacherRows = teacherRows.filter(r => r.overallStatus === selectedStatus)
+  }
+
+  // Sort: incomplete first
+  teacherRows.sort((a, b) => STATUS_ORDER[a.overallStatus] - STATUS_ORDER[b.overallStatus])
+
+  const pendingCount = teacherRows.filter(r => r.overallStatus !== "Completo").length
+  const doneCount = teacherRows.filter(r => r.overallStatus === "Completo").length
 
   return (
     <div className="flex flex-col gap-6">
-      <PageHeader 
-        title="Evaluaciones por curso" 
+      <PageHeader
+        title="Seguimiento de docentes"
         breadcrumbs={[
           { label: "Director" },
-          { label: "Evaluaciones" },
-          { label: "Por curso" }
+          { label: "Seguimiento" },
         ]}
         actions={
-          <Button variant="outline" onClick={handleExport}>
-            <Download className="size-4 mr-2" />
-            Exportar
-          </Button>
+          <div className="flex items-center gap-4 text-sm text-muted-foreground">
+            <span><strong className="text-foreground">{pendingCount}</strong> con entregas pendientes</span>
+            <span><strong className="text-success">{doneCount}</strong> completos</span>
+          </div>
         }
       />
 
       {/* Filters */}
       <Card>
-        <CardContent className="flex flex-col gap-3 py-4 md:flex-row md:flex-wrap md:items-center">
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-            <span className="text-sm text-muted-foreground">Periodo:</span>
-            <Select value={selectedPeriod} onValueChange={setSelectedPeriod}>
-              <SelectTrigger className="w-full sm:w-[180px]">
+        <CardContent className="flex flex-wrap gap-4 py-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">Período:</span>
+            <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
+              <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {data.periods.map(period => (
-                  <SelectItem key={period.id} value={period.id}>
-                    {period.name}
-                  </SelectItem>
+                {data.periods.map(p => (
+                  <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Curso:</span>
-            <Select value={selectedCourse} onValueChange={setSelectedCourse}>
-              <SelectTrigger className="w-full sm:w-[120px]">
+            <Select value={selectedCourseId} onValueChange={setSelectedCourseId}>
+              <SelectTrigger className="w-[140px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                {data.courses.map(course => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.name}
-                  </SelectItem>
+                {data.courses.map(c => (
+                  <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
           </div>
-
-          <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Estado:</span>
             <Select value={selectedStatus} onValueChange={setSelectedStatus}>
-              <SelectTrigger className="w-full sm:w-[150px]">
+              <SelectTrigger className="w-[160px]">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">Todos</SelectItem>
-                <SelectItem value="Completo">Completo</SelectItem>
-                <SelectItem value="En progreso">En progreso</SelectItem>
                 <SelectItem value="Sin iniciar">Sin iniciar</SelectItem>
+                <SelectItem value="En progreso">En progreso</SelectItem>
+                <SelectItem value="Completo">Completo</SelectItem>
               </SelectContent>
             </Select>
           </div>
         </CardContent>
       </Card>
 
-      {/* Data Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Listado de evaluaciones</CardTitle>
-          <CardDescription>
-            {filteredEvaluations.length} evaluaciones encontradas
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Alumno</TableHead>
-                <TableHead>Curso</TableHead>
-                <TableHead>Docente</TableHead>
-                <TableHead>Materia</TableHead>
-                <TableHead>Estado</TableHead>
-                <TableHead>Ultima actualizacion</TableHead>
-                <TableHead className="text-right">Accion</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {filteredEvaluations.map((evaluation) => (
-                <TableRow key={evaluation.id}>
-                  <TableCell className="font-medium">{evaluation.studentName}</TableCell>
-                  <TableCell>{evaluation.courseName}</TableCell>
-                  <TableCell>{evaluation.teacherName}</TableCell>
-                  <TableCell>{evaluation.subjectName}</TableCell>
-                  <TableCell>
-                    <StatusBadge status={evaluation.status} />
-                  </TableCell>
-                  <TableCell className="text-muted-foreground text-sm">
-                    {evaluation.lastUpdated}
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Sheet>
-                      <SheetTrigger asChild>
-                        <Button 
-                          variant="outline" 
-                          size="sm"
-                          onClick={() => setSelectedEvaluation(evaluation)}
-                        >
-                          <Eye className="size-4 mr-1" />
-                          Ver
-                        </Button>
-                      </SheetTrigger>
-                      <SheetContent className="w-[min(100vw,500px)] sm:max-w-[500px]">
-                        <SheetHeader>
-                          <SheetTitle>{evaluation.studentName}</SheetTitle>
-                          <SheetDescription>
-                            {evaluation.courseName} • {evaluation.subjectName} • {data.periods.find(p => p.id === selectedPeriod)?.name}
-                          </SheetDescription>
-                        </SheetHeader>
-                        <div className="mt-6 space-y-6">
-                          <div>
-                            <h4 className="text-sm font-medium mb-3">Calificaciones</h4>
-                            <div className="space-y-2">
-                              {Object.entries(evaluation.grades).length > 0 ? (
-                                Object.entries(evaluation.grades).map(([criterion, grade]) => (
-                                  <div key={criterion} className="flex items-center justify-between py-2 border-b">
-                                    <span className="text-sm">{criterion}</span>
-                                    <GradeBadge grade={grade as GradeLevel} />
-                                  </div>
-                                ))
-                              ) : (
-                                <p className="text-sm text-muted-foreground">Sin calificaciones cargadas</p>
-                              )}
-                            </div>
-                          </div>
+      {/* Teacher rows */}
+      <div className="flex flex-col gap-3">
+        {teacherRows.length === 0 && (
+          <Card>
+            <CardContent className="py-8 text-center text-sm text-muted-foreground">
+              No hay docentes con asignaciones para los filtros seleccionados.
+            </CardContent>
+          </Card>
+        )}
 
-                          <Separator />
+        {teacherRows.map((row) => {
+          const pct = getProgressPercentage(row.completedSlots, row.totalSlots)
+          const initials = row.teacherName.split(" ").map(n => n[0]).join("").slice(0, 2)
 
-                          <div>
-                            <h4 className="text-sm font-medium mb-3">Informacion del docente</h4>
-                            <div className="rounded-lg border p-3">
-                              <p className="font-medium text-sm">{evaluation.teacherName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                Ultima actualizacion: {evaluation.lastUpdated}
-                              </p>
-                            </div>
-                          </div>
+          return (
+            <Card key={row.teacherId} className={row.overallStatus === "Sin iniciar" ? "border-destructive/30" : ""}>
+              <CardContent className="flex flex-col gap-4 py-4 sm:flex-row sm:items-center">
+                {/* Teacher info */}
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <Avatar className="size-10 shrink-0">
+                    <AvatarFallback className="bg-primary/10 text-primary text-sm">
+                      {initials}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <p className="font-medium text-sm">{row.teacherName}</p>
+                      <StatusBadge status={row.overallStatus} />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-0.5">
+                      {row.assignments.length} {row.assignments.length === 1 ? "asignación" : "asignaciones"}
+                    </p>
+                  </div>
+                </div>
 
-                          {evaluation.status === "Completo" && (
-                            <>
-                              <Separator />
-                              <div className="rounded-lg border border-success/50 bg-success/10 p-4">
-                                <h4 className="text-sm font-medium text-success mb-1">Boletin listo</h4>
-                                <p className="text-sm text-muted-foreground mb-3">
-                                  Esta evaluacion esta completa y lista para incluir en el boletin.
-                                </p>
-                                <Button size="sm" asChild>
-                                  <Link href={`/director/boletines?student=${evaluation.studentId}`}>
-                                    Revisar y enviar
-                                  </Link>
-                                </Button>
+                {/* Progress */}
+                <div className="flex items-center gap-3 w-full sm:w-48">
+                  <Progress value={pct} className="h-2 flex-1" />
+                  <span className="text-sm text-muted-foreground tabular-nums w-10 text-right">{pct}%</span>
+                </div>
+
+                {/* Detail button */}
+                <Sheet>
+                  <SheetTrigger asChild>
+                    <Button variant="outline" size="sm" className="shrink-0">
+                      Ver detalle
+                    </Button>
+                  </SheetTrigger>
+                  <SheetContent className="w-[min(100vw,480px)] sm:max-w-[480px]">
+                    <SheetHeader>
+                      <SheetTitle>{row.teacherName}</SheetTitle>
+                      <SheetDescription>
+                        Detalle de entregas por curso y materia
+                      </SheetDescription>
+                    </SheetHeader>
+                    <div className="mt-6 flex flex-col gap-2">
+                      {row.assignments.map((a, i) => {
+                        const aPct = getProgressPercentage(a.completedCount, a.studentCount)
+                        return (
+                          <div key={i} className="rounded-lg border p-3">
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <p className="text-sm font-medium">{a.courseName}</p>
+                                <p className="text-xs text-muted-foreground">{a.subjectName}</p>
                               </div>
-                            </>
-                          )}
-                        </div>
-                      </SheetContent>
-                    </Sheet>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+                              <StatusBadge status={a.status} />
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                              <Progress value={aPct} className="h-1.5 flex-1" />
+                              <span className="text-xs text-muted-foreground tabular-nums">
+                                {a.completedCount}/{a.studentCount} alumnos
+                              </span>
+                            </div>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  </SheetContent>
+                </Sheet>
+              </CardContent>
+            </Card>
+          )
+        })}
+      </div>
     </div>
   )
 }

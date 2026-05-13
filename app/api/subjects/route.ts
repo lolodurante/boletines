@@ -41,6 +41,43 @@ function isUuid(value: string) {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value)
 }
 
+export async function DELETE(request: Request) {
+  const auth = await requireApiDirectorOrAdmin()
+  if (auth.response) return auth.response
+
+  const { searchParams } = new URL(request.url)
+  const id = searchParams.get("id")
+  if (!id) {
+    return NextResponse.json({ error: "ID requerido" }, { status: 400 })
+  }
+
+  if (!hasConfiguredDatabase()) {
+    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
+  }
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.evaluationCriterion.updateMany({
+        where: { subjectId: id },
+        data: { active: false },
+      })
+      await tx.courseAssignment.deleteMany({
+        where: { subjectId: id },
+      })
+      await tx.subject.update({
+        where: { id },
+        data: { active: false },
+      })
+    })
+    return NextResponse.json({ ok: true })
+  } catch (error) {
+    logWarning("Could not delete subject", {
+      reason: error instanceof Error ? error.message : "Unknown delete error",
+    })
+    return NextResponse.json({ error: "No se pudo eliminar la materia" }, { status: 500 })
+  }
+}
+
 export async function POST(request: Request) {
   const auth = await requireApiDirectorOrAdmin()
   if (auth.response) return auth.response
@@ -58,6 +95,7 @@ export async function POST(request: Request) {
     await prisma.$transaction(async (tx) => {
       for (const subject of parsed.data.subjects) {
         const gradeRange = subject.appliesTo.map(normalizeGrade)
+        const activeGrades = new Set(gradeRange)
         const savedSubject = isUuid(subject.id)
           ? await tx.subject.upsert({
               where: { id: subject.id },
@@ -88,6 +126,7 @@ export async function POST(request: Request) {
         const activeCriterionIds: string[] = []
         for (const gradeCriteria of subject.criteriaByGrade) {
           const grade = normalizeGrade(gradeCriteria.grade)
+          if (!activeGrades.has(grade)) continue
 
           for (const criterion of gradeCriteria.criteria) {
             const savedCriterion = isUuid(criterion.id)

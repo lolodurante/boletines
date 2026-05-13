@@ -39,26 +39,27 @@ interface NavItem {
 
 const directorNavItems: NavItem[] = [
   { label: "Dashboard", href: "/director/dashboard", icon: Home },
-  { 
-    label: "Evaluaciones", 
-    href: "/director/evaluaciones", 
-    icon: LayoutGrid,
+  { label: "Seguimiento", href: "/director/evaluaciones", icon: LayoutGrid },
+  {
+    label: "Boletines",
+    href: "/director/boletines",
+    icon: FileText,
     children: [
-      { label: "Por curso", href: "/director/evaluaciones" },
+      { label: "Generar boletines", href: "/director/boletines" },
       { label: "Historial", href: "/director/historial" },
     ]
   },
-  { label: "Boletines", href: "/director/boletines", icon: FileText },
   { label: "Estadísticas", href: "/director/estadisticas", icon: BarChart2 },
-  { 
-    label: "Configuración", 
-    href: "/director/configuracion", 
+  {
+    label: "Configuración",
+    href: "/director/configuracion",
     icon: Settings,
     children: [
       { label: "Escalas de calificación", href: "/director/configuracion/escalas" },
       { label: "Materias y criterios", href: "/director/configuracion/materias" },
       { label: "Períodos", href: "/director/configuracion/periodos" },
       { label: "Docentes y asignaciones", href: "/director/configuracion/docentes" },
+      { label: "Cursos y alumnos", href: "/director/configuracion/alumnos" },
     ]
   },
 ]
@@ -79,7 +80,7 @@ export function AppSidebar({ role, userName, userRole }: AppSidebarProps) {
   const pathname = usePathname()
   const { data } = usePlatformData()
   const pendingReportCount = data.reportCards.filter(
-    (report) => report.status === "Listo para revisión" || report.status === "Pendiente de envío",
+    (report) => report.status === "Listo para revisión",
   ).length
   const navItems = role === "director" ? directorNavItems : teacherNavItems
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
@@ -157,7 +158,7 @@ export function AppSidebar({ role, userName, userRole }: AppSidebarProps) {
                 <item.icon className="size-4 shrink-0" />
                 <span className="truncate">{item.label}</span>
               </span>
-              {role === "director" && item.href === "/director/boletines" && pendingReportCount > 0 && (
+              {role === "director" && item.label === "Boletines" && pendingReportCount > 0 && (
                 <Badge variant="secondary" className="bg-sidebar-primary text-sidebar-primary-foreground text-xs">
                   {pendingReportCount}
                 </Badge>

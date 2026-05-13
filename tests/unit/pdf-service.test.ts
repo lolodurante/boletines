@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 import { generateReportCardPdf } from "@/lib/pdf/generate-report-card-pdf"
 
+function criterion(name: string, gradeLabel: string, observation: string) {
+  return { name, gradeLabel, observation }
+}
+
 describe("generateReportCardPdf", () => {
   it("generates validated PDF data from evaluation content", async () => {
     const result = await generateReportCardPdf({
@@ -11,7 +15,6 @@ describe("generateReportCardPdf", () => {
           subjectName: "Matematica",
           teacherName: "Laura Fernandez",
           criteria: [{ name: "Calculo", gradeLabel: "Logrado" }],
-          teacherObservation: "Buen trabajo.",
         },
       ],
       directorObservation: "Continua acompanamiento.",
@@ -22,5 +25,162 @@ describe("generateReportCardPdf", () => {
     expect(result.buffer.byteLength).toBeGreaterThan(0)
     expect(result.buffer.subarray(0, 5).toString("utf-8")).toBe("%PDF-")
     expect(result.url).toContain("data:application/pdf;base64,")
+    expect(result.buffer.toString("latin1")).toContain("Observación: Continua acompanamiento.")
+    expect(result.buffer.toString("latin1")).not.toContain("Observación dirección")
+  })
+
+  it("keeps the official Labarden grid format used by the reference PDF", async () => {
+    const result = await generateReportCardPdf({
+      student: { fullName: "Inaki Casanova", grade: "6", division: "B" },
+      period: { name: "Demo Direccion 2026" },
+      subjects: [
+        {
+          subjectName: "Ciencias Naturales",
+          teacherName: "Cicciaro, Ma. Isabel",
+          criteria: [
+            criterion(
+              "Observacion y registro",
+              "EXCELENTE",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Explicacion de fenomenos",
+              "BUENO",
+              "Muestra interes por aprender y aporta ideas pertinentes en los intercambios.",
+            ),
+            criterion(
+              "Trabajo experimental",
+              "MUY BUENO",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+          ],
+        },
+        {
+          subjectName: "Ciencias Sociales",
+          teacherName: "Chevallier B. Mandy",
+          criteria: [
+            criterion(
+              "Comprension de procesos",
+              "MUY BUENO",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion("Uso de fuentes", "BUENO", "Avanza con seguridad y demuestra autonomia en las actividades del periodo."),
+            criterion(
+              "Trabajo en clase",
+              "EN PROCESO",
+              "Se observa progreso sostenido; conviene seguir fortaleciendo la organizacion del trabajo.",
+            ),
+          ],
+        },
+        {
+          subjectName: "Educacion Artistica",
+          teacherName: "Cura Olivera, Josefina",
+          criteria: [
+            criterion(
+              "Exploracion de materiales",
+              "EXCELENTE",
+              "Muestra interes por aprender y aporta ideas pertinentes en los intercambios.",
+            ),
+            criterion(
+              "Proceso creativo",
+              "MUY BUENO",
+              "Responde bien al acompanamiento docente y completa las tareas con mayor continuidad.",
+            ),
+            criterion(
+              "Presentacion de trabajos",
+              "EN PROCESO",
+              "Muestra interes por aprender y aporta ideas pertinentes en los intercambios.",
+            ),
+          ],
+        },
+        {
+          subjectName: "Ingles",
+          teacherName: "Cuper B, Daniela M.",
+          criteria: [
+            criterion("Comprension", "BUENO", "Sostiene un muy buen compromiso con las propuestas y participa activamente."),
+            criterion(
+              "Produccion oral",
+              "MUY BUENO",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Produccion escrita",
+              "BUENO",
+              "Muestra interes por aprender y aporta ideas pertinentes en los intercambios.",
+            ),
+          ],
+        },
+        {
+          subjectName: "Matematica",
+          teacherName: "Cejas, Andrea",
+          criteria: [
+            criterion(
+              "Resolucion de problemas",
+              "EXCELENTE",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Calculo mental",
+              "MUY BUENO",
+              "Responde bien al acompanamiento docente y completa las tareas con mayor continuidad.",
+            ),
+            criterion(
+              "Geometria y medida",
+              "EXCELENTE",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Argumentacion",
+              "BUENO",
+              "Se observa progreso sostenido; conviene seguir fortaleciendo la organizacion del trabajo.",
+            ),
+          ],
+        },
+        {
+          subjectName: "Practicas del Lenguaje",
+          teacherName: "Cavallero, Camila",
+          criteria: [
+            criterion(
+              "Comprension lectora",
+              "EXCELENTE",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Produccion escrita",
+              "MUY BUENO",
+              "Responde bien al acompanamiento docente y completa las tareas con mayor continuidad.",
+            ),
+            criterion(
+              "Participacion oral",
+              "EXCELENTE",
+              "Sostiene un muy buen compromiso con las propuestas y participa activamente.",
+            ),
+            criterion(
+              "Uso de convenciones",
+              "BUENO",
+              "Avanza con seguridad y demuestra autonomia en las actividades del periodo.",
+            ),
+          ],
+        },
+      ],
+      directorObservation: "Continua acompanamiento desde direccion.",
+      branding: { primaryColor: "#2563eb", secondaryColor: "#64748b" },
+    })
+
+    const pdf = result.buffer.toString("latin1")
+    const pageCount = pdf.match(/\/Type \/Page\b/g)?.length ?? 0
+
+    expect(pageCount).toBe(2)
+    expect(pdf).toContain("/MediaBox [0 0 595 842]")
+    expect(pdf.match(/COLEGIO LABARDÉN - BOLETÍN DEMO DIRECCION 2026/g)).toHaveLength(2)
+    expect(pdf.match(/Indicadores de logro en las áreas/g)).toHaveLength(2)
+    expect(pdf).toContain("NOMBRE DEL ALUMNO: Inaki Casanova")
+    expect(pdf).toContain("CURSO: 6 B")
+    expect(pdf).toContain("DESTACADO")
+    expect(pdf).toContain("EXCELENTE")
+    expect(pdf).toContain("DOCENTE: Cicciaro, Ma. Isabel")
+    expect(pdf).not.toContain("Observación docente")
+    expect(pdf).toContain("Observación: Continua acompanamiento desde direccion.")
+    expect(pdf).not.toContain("Observación dirección")
   })
 })

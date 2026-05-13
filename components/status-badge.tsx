@@ -6,7 +6,7 @@ import {
   CheckCircle2, 
   Clock, 
   Minus, 
-  Send, 
+  FileText,
   AlertCircle, 
   Pencil 
 } from "lucide-react"
@@ -27,10 +27,8 @@ const statusConfig: Record<string, {
   "Sin iniciar": { bg: "bg-muted text-muted-foreground", text: "Sin iniciar", icon: Minus },
   "No listo": { bg: "bg-muted text-muted-foreground", text: "No listo", icon: Minus },
   "Listo para revisión": { bg: "bg-accent text-accent-foreground", text: "Listo para revisión", icon: CheckCircle2 },
-  "Enviado": { bg: "bg-accent text-accent-foreground", text: "Enviado", icon: Send },
-  "Pendiente de envío": { bg: "bg-warning text-warning-foreground", text: "Pendiente de envío", icon: Clock },
+  "PDF generado": { bg: "bg-success text-success-foreground", text: "PDF generado", icon: FileText },
   "Requiere revisión": { bg: "bg-destructive text-destructive-foreground", text: "Requiere revisión", icon: AlertCircle },
-  "Sin correo registrado": { bg: "bg-destructive text-destructive-foreground", text: "Sin correo", icon: AlertCircle },
   "Borrador": { bg: "bg-muted text-muted-foreground", text: "Borrador", icon: Pencil },
   "Activo": { bg: "bg-success text-success-foreground", text: "Activo", icon: CheckCircle2 },
   "Cerrado": { bg: "bg-muted text-muted-foreground", text: "Cerrado", icon: Minus },

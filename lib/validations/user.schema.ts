@@ -8,7 +8,6 @@ export const userSchema = z.object({
   name: z.string().min(1),
   email: requiredEmailSchema,
   role: userRoleSchema,
-  zohoId: idSchema.optional(),
   createdAt: isoDateSchema,
   updatedAt: isoDateSchema,
 })
@@ -16,7 +15,6 @@ export const userSchema = z.object({
 export const teacherSchema = z.object({
   id: idSchema,
   userId: idSchema,
-  zohoId: idSchema.optional(),
   assignedCourses: z.array(idSchema),
 })
 

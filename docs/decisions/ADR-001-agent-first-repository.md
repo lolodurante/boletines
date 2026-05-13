@@ -15,5 +15,5 @@ Separar dominio, validaciones, servicios, integraciones, mocks y documentacion. 
 ## Consecuencias
 
 - Las features nuevas deben entrar por contratos y tests.
-- Zoho, email y PDF operan en modo stub hasta tener informacion real.
+- Email y PDF operan en modo stub hasta tener informacion real.
 - CI valida lint, typecheck, tests y build.

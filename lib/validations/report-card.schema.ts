@@ -1,5 +1,5 @@
 import { z } from "zod"
-import { idSchema, isoDateSchema, optionalEmailSchema, requiredEmailSchema } from "./common"
+import { idSchema, isoDateSchema, optionalEmailSchema } from "./common"
 
 export const reportCardStatusSchema = z.enum([
   "NOT_READY",
@@ -18,7 +18,7 @@ export const reportCardSchema = z.object({
   directorObservation: z.string().optional(),
   pdfUrl: z.string().url().optional(),
   sentAt: isoDateSchema.optional(),
-  zohoUploadStatus: z.enum(["PENDING", "UPLOADED", "FAILED", "SKIPPED"]),
+  pdfStatus: z.enum(["PENDING", "GENERATED", "FAILED", "SKIPPED"]),
 })
 
 export const reportDeliverySchema = z.object({
@@ -30,11 +30,11 @@ export const reportDeliverySchema = z.object({
   sentAt: isoDateSchema.optional(),
 })
 
-export const sendReportCardSchema = z.object({
+export const generateReportCardPdfSchema = z.object({
   reportCardId: idSchema,
-  recipientEmail: requiredEmailSchema,
+  directorObservation: z.string().optional(),
 })
 
 export type ReportCardInput = z.infer<typeof reportCardSchema>
 export type ReportDeliveryInput = z.infer<typeof reportDeliverySchema>
-export type SendReportCardInput = z.infer<typeof sendReportCardSchema>
+export type GenerateReportCardPdfInput = z.infer<typeof generateReportCardPdfSchema>

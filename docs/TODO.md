@@ -1,66 +1,66 @@
 # TODO
 
-Este archivo concentra lo pendiente para la siguiente etapa. Zoho CRM queda definido como fuente unica de datos maestros; la app mantiene una base propia para operar evaluaciones, boletines, entregas y auditoria.
+Este archivo concentra lo pendiente para la siguiente etapa. La base de datos de la app es la fuente unica para datos academicos, evaluaciones, boletines, entregas y auditoria.
 
 ## Decisiones por tomar
 
 - [x] Elegir proveedor PostgreSQL: Supabase.
 - [x] Elegir ORM: Prisma.
-- [ ] Elegir auth provider: Auth.js, Clerk u otro.
-- [ ] Elegir email provider: recomendacion inicial, Resend.
+- [x] Elegir auth provider: Supabase Auth con Google.
+- [x] Descartar envios de email desde la app.
 - [ ] Elegir storage de PDFs: Vercel Blob, Supabase Storage u otro.
 - [ ] Confirmar plataforma de deploy: Vercel u otra.
 
-## Zoho CRM
+## Datos academicos
 
-- [x] Definir Zoho CRM como fuente unica de datos maestros.
-- [ ] Confirmar nombres reales de modulos Zoho para alumnos, docentes, directivos y familias.
-- [ ] Confirmar campos exactos de alumno: nombre, apellido, grado, division, estado, email familiar, legajo.
+- [x] Definir la DB propia como fuente unica de alumnos, docentes, directivos y familias.
+- [x] Quitar dependencia operativa de sistemas externos de datos maestros.
+- [x] Preparar importador idempotente de docentes/directivos primaria 2026: `npm run import:docentes:2026`.
+- [x] Corregir variables Supabase (`DATABASE_URL`, `DIRECT_URL`, `NEXT_PUBLIC_SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`) y ejecutar `npm run import:docentes:2026`.
+- [x] Verificar en DB que queden 4 directivos importados, 42 docentes y 42 perfiles `Teacher`.
+- [ ] Confirmar campos exactos de alumno: nombre, apellido, grado, division, estado, email familiar, legajo interno.
 - [ ] Confirmar campos exactos de docente/directivo: nombre, email, rol, estado.
-- [ ] Confirmar si asignaciones docente-curso-materia viven en Zoho o se configuran en la app.
-- [ ] Confirmar endpoint/proceso correcto para adjuntar PDF al legajo del alumno.
-- [ ] Definir estrategia de sync inicial desde Zoho hacia DB local.
-- [ ] Definir estrategia de actualizacion incremental desde Zoho.
+- [ ] Definir pantallas o scripts para alta, edicion e importacion inicial de alumnos.
+- [ ] Definir pantallas o scripts para alta, edicion e importacion inicial de docentes.
 - [ ] Definir manejo de alumnos sin email familiar.
-- [ ] Confirmar si directivos se sincronizan como usuarios desde Zoho o se crean primero en auth local y se vinculan por `zohoId`.
+- [ ] Definir alta inicial de directivos en auth y DB local.
 
 ## Base de datos propia
 
 - [x] Crear `prisma/schema.prisma`.
 - [x] Modelar tablas locales para periodos.
 - [x] Modelar materias, criterios/rubricas y escalas.
-- [x] Modelar asignaciones si no vienen completas desde Zoho.
+- [x] Modelar asignaciones docente-curso-materia en DB.
 - [x] Modelar evaluaciones y notas por criterio.
 - [x] Modelar borradores y estado de envio docente.
 - [x] Modelar boletines, observaciones del director y estados.
 - [x] Modelar entregas por email.
-- [x] Modelar logs de sync con Zoho.
+- [x] Modelar estado local de PDF en boletines.
 - [x] Crear migracion inicial.
 - [x] Crear `lib/db/client.ts`.
 - [x] Crear repositories iniciales en `server/repositories`.
 - [x] Crear servicio dinamico `getPlatformData()` con fallback a mocks si Supabase no esta configurado.
 - [x] Exponer `/api/platform-data` para hidratar pantallas desde DB cuando exista `DATABASE_URL`.
 - [ ] Conectar `.env.local` real de Supabase y ejecutar migracion contra el proyecto.
-- [ ] Crear seed local con datos realistas sincronizables desde Zoho.
+- [ ] Crear seed local con datos realistas.
 
 ## Auth y roles
 
-- [ ] Definir login real.
-- [ ] Mapear usuarios de Zoho a usuarios locales.
-- [ ] Definir alta inicial de directivos.
-- [ ] Proteger rutas de director.
-- [ ] Proteger rutas de docente.
-- [ ] Validar permisos a nivel server actions/services.
+- [x] Definir login real: Supabase Auth con Google.
+- [ ] Configurar Google OAuth en Supabase para produccion.
+- [x] Definir alta inicial de directivos en DB local.
+- [ ] Verificar alta inicial de directivos en Supabase Auth con primer login Google.
+- [x] Proteger rutas de director.
+- [x] Proteger rutas de docente.
+- [x] Validar permisos a nivel API/services.
 - [ ] Agregar tests de autorizacion por flujo.
 
-## Email
+## Entrega de boletines
 
-- [ ] Confirmar proveedor.
-- [ ] Configurar dominio/remitente institucional.
-- [ ] Implementar envio real solo para produccion.
-- [ ] Registrar resultados de envio en DB.
-- [ ] Agregar retry/manual resend para fallos.
-- [ ] Bloquear envio si falta email familiar.
+- [x] Confirmar que no habra envios de email desde la app.
+- [ ] Definir entrega manual del PDF: descarga, impresion o envio externo.
+- [x] Ajustar UI y estados para reemplazar "enviar" por generar/aprobar PDF.
+- [ ] Revisar si siguen haciendo falta email familiar y `ReportDelivery`.
 
 ## PDF
 
@@ -71,7 +71,6 @@ Este archivo concentra lo pendiente para la siguiente etapa. Zoho CRM queda defi
 - [ ] Implementar generacion PDF real.
 - [ ] Guardar PDF en storage.
 - [ ] Asociar URL/storage key al boletin local.
-- [ ] Subir PDF final a Zoho.
 
 ## UI v0 pendiente de ordenar
 
@@ -98,6 +97,5 @@ Este archivo concentra lo pendiente para la siguiente etapa. Zoho CRM queda defi
 - [x] Crear ADR de DB/ORM elegido.
 - [ ] Crear ADR de auth provider.
 - [ ] Crear ADR de email/storage.
-- [ ] Actualizar specs Zoho con campos reales.
 - [ ] Actualizar runbook de deploy con variables definitivas.
-- [ ] Documentar sync Zoho -> DB local.
+- [ ] Documentar administracion/importacion de datos academicos en DB.

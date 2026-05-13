@@ -93,6 +93,7 @@ export async function POST(request: Request) {
       where: {
         grade: course.grade,
         division: course.division,
+        status: "ACTIVE",
       },
       select: { id: true },
     })
@@ -155,7 +156,10 @@ export async function POST(request: Request) {
     const scaleLevelByLabel = new Map(scaleLevels.map((level) => [level.label, level.id]))
     const missingLabels = requestedLabels.filter((label) => !scaleLevelByLabel.has(label))
     if (missingLabels.length > 0) {
-      return NextResponse.json({ error: "El payload incluye calificaciones invalidas" }, { status: 400 })
+      return NextResponse.json(
+        { error: `Faltan niveles de escala en la DB: ${missingLabels.join(", ")}` },
+        { status: 400 },
+      )
     }
 
     const status = input.submit ? "SUBMITTED" : "DRAFT"
@@ -235,7 +239,12 @@ export async function POST(request: Request) {
 
       if (input.submit) {
         const allAssignments = await tx.courseAssignment.findMany({
-          where: { grade: course.grade, division: course.division, periodId: input.periodId },
+          where: {
+            grade: course.grade,
+            division: course.division,
+            periodId: input.periodId,
+            subject: { active: true },
+          },
           select: { teacherId: true, subjectId: true },
         })
 

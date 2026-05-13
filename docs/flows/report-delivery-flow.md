@@ -1,24 +1,23 @@
-# Flujo de boletin y entrega
+# Flujo de boletin y PDF
 
 ## Estados de boletin
 
 - `NOT_READY`: faltan evaluaciones requeridas.
 - `READY_FOR_REVIEW`: todas las evaluaciones requeridas estan completas.
 - `NEEDS_REVISION`: direccion pidio correccion.
-- `APPROVED`: listo para generar PDF y enviar.
-- `SENT`: enviado.
-- `BLOCKED_MISSING_EMAIL`: falta email de padre/tutor.
+- `APPROVED`: listo para generar PDF.
+- `SENT`: legado; no se usa si la entrega queda fuera de la app.
+- `BLOCKED_MISSING_EMAIL`: legado; no se usa si la entrega queda fuera de la app.
 
-## Estados de entrega
+## Estados de PDF
 
-- `PENDING`: preparado para enviar.
-- `SENT`: email enviado.
-- `FAILED`: fallo proveedor o storage.
-- `BLOCKED`: no puede enviarse por datos incompletos.
+- `PENDING`: pendiente de generar.
+- `GENERATED`: PDF generado y asociado al boletin.
+- `FAILED`: fallo la generacion o el storage.
+- `SKIPPED`: no se genero PDF.
 
 ## Reglas
 
-- No enviar boletin sin email familiar.
-- No generar envio real en test/dev salvo `ENABLE_REAL_EMAIL_SENDING=true`.
-- Subida a Zoho ocurre despues de generar PDF y debe registrar resultado.
-- Si falla Zoho, el envio por email no debe ocultar el error operativo.
+- La generacion de PDF debe registrar `pdfUrl` y `pdfStatus` en la DB.
+- La entrega a familias ocurre fuera de la app; no se envia email desde el sistema.
+- Revisar si `ReportDelivery`, `familyEmail`, `SENT` y `BLOCKED_MISSING_EMAIL` siguen siendo necesarios.

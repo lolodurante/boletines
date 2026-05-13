@@ -7,7 +7,6 @@
 - `lib/auth`: roles, permisos y guards.
 - `lib/email`: contrato de email, templates y cliente mock-safe.
 - `lib/pdf`: schema de datos, template inicial y generador stub.
-- `lib/zoho`: contrato, mappers, mock data y cliente stub.
 - `lib/mock-data`: mocks realistas del dominio Labarden.
 - `lib/db`: cliente Prisma para Supabase Postgres.
 - `prisma`: schema y migraciones Prisma.

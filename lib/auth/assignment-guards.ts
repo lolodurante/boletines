@@ -26,6 +26,7 @@ export async function teacherOwnsAssignment(input: {
       periodId: input.periodId,
       grade: course.grade,
       division: course.division,
+      subject: { active: true },
     },
   })
 

@@ -16,19 +16,19 @@ const now = new Date("2026-03-01T12:00:00.000Z")
 
 export const mockUsers: User[] = [
   { id: "user-director", name: "Mariana Acosta", email: "direccion@labarden.edu.ar", role: "DIRECTOR", createdAt: now, updatedAt: now },
-  { id: "user-teacher-1", name: "Laura Fernandez", email: "laura.fernandez@labarden.edu.ar", role: "TEACHER", zohoId: "z-t-001", createdAt: now, updatedAt: now },
-  { id: "user-teacher-2", name: "Carlos Medina", email: "carlos.medina@labarden.edu.ar", role: "TEACHER", zohoId: "z-t-002", createdAt: now, updatedAt: now },
+  { id: "user-teacher-1", name: "Laura Fernandez", email: "laura.fernandez@labarden.edu.ar", role: "TEACHER", createdAt: now, updatedAt: now },
+  { id: "user-teacher-2", name: "Carlos Medina", email: "carlos.medina@labarden.edu.ar", role: "TEACHER", createdAt: now, updatedAt: now },
 ]
 
 export const mockTeachers: Teacher[] = [
-  { id: "teacher-1", userId: "user-teacher-1", zohoId: "z-t-001", assignedCourses: ["3-A", "4-A"] },
-  { id: "teacher-2", userId: "user-teacher-2", zohoId: "z-t-002", assignedCourses: ["3-A"] },
+  { id: "teacher-1", userId: "user-teacher-1", assignedCourses: ["3-A", "4-A"] },
+  { id: "teacher-2", userId: "user-teacher-2", assignedCourses: ["3-A"] },
 ]
 
 export const mockStudents: Student[] = [
-  { id: "student-1", firstName: "Martina", lastName: "Garcia", grade: "3", division: "A", familyEmail: "garcia.familia@gmail.com", zohoId: "z-st-001", status: "ACTIVE" },
-  { id: "student-2", firstName: "Joaquin", lastName: "Martinez", grade: "3", division: "A", zohoId: "z-st-002", status: "ACTIVE" },
-  { id: "student-3", firstName: "Renata", lastName: "Nunez", grade: "4", division: "A", familyEmail: "nunez.padres@gmail.com", zohoId: "z-st-003", status: "ACTIVE" },
+  { id: "student-1", firstName: "Martina", lastName: "Garcia", grade: "3", division: "A", familyEmail: "garcia.familia@gmail.com", status: "ACTIVE" },
+  { id: "student-2", firstName: "Joaquin", lastName: "Martinez", grade: "3", division: "A", status: "ACTIVE" },
+  { id: "student-3", firstName: "Renata", lastName: "Nunez", grade: "4", division: "A", familyEmail: "nunez.padres@gmail.com", status: "ACTIVE" },
 ]
 
 export const mockSubjects: Subject[] = [
@@ -89,7 +89,7 @@ export const mockEvaluationGrades: EvaluationGrade[] = [
 ]
 
 export const mockReportCards: ReportCard[] = [
-  { id: "report-1", studentId: "student-1", periodId: "period-2026-t1", status: "READY_FOR_REVIEW", zohoUploadStatus: "PENDING" },
-  { id: "report-2", studentId: "student-2", periodId: "period-2026-t1", status: "BLOCKED_MISSING_EMAIL", zohoUploadStatus: "SKIPPED" },
-  { id: "report-3", studentId: "student-3", periodId: "period-2026-t1", status: "NOT_READY", zohoUploadStatus: "PENDING" },
+  { id: "report-1", studentId: "student-1", periodId: "period-2026-t1", status: "READY_FOR_REVIEW", pdfStatus: "PENDING" },
+  { id: "report-2", studentId: "student-2", periodId: "period-2026-t1", status: "BLOCKED_MISSING_EMAIL", pdfStatus: "SKIPPED" },
+  { id: "report-3", studentId: "student-3", periodId: "period-2026-t1", status: "NOT_READY", pdfStatus: "PENDING" },
 ]

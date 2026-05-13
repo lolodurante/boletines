@@ -17,7 +17,6 @@ export const reportCardPdfDataSchema = z.object({
       gradeLabel: z.string().min(1),
       observation: z.string().optional(),
     })).min(1),
-    teacherObservation: z.string().optional(),
   })).min(1),
   directorObservation: z.string().optional(),
   branding: z.object({

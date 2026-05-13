@@ -11,15 +11,13 @@ export type ReportCardStatus =
   | "SENT"
   | "BLOCKED_MISSING_EMAIL"
 export type ReportDeliveryStatus = "PENDING" | "SENT" | "FAILED" | "BLOCKED"
-export type ZohoUploadStatus = "PENDING" | "UPLOADED" | "FAILED" | "SKIPPED"
-export type ZohoSyncStatus = "SUCCESS" | "FAILED" | "SKIPPED"
+export type ReportCardPdfStatus = "PENDING" | "GENERATED" | "FAILED" | "SKIPPED"
 
 export interface User {
   id: string
   name: string
   email: string
   role: UserRole
-  zohoId?: string
   createdAt: Date
   updatedAt: Date
 }
@@ -31,14 +29,12 @@ export interface Student {
   grade: string
   division: string
   familyEmail?: string
-  zohoId?: string
   status: StudentStatus
 }
 
 export interface Teacher {
   id: string
   userId: string
-  zohoId?: string
   assignedCourses: string[]
 }
 
@@ -120,7 +116,7 @@ export interface ReportCard {
   directorObservation?: string
   pdfUrl?: string
   sentAt?: Date
-  zohoUploadStatus: ZohoUploadStatus
+  pdfStatus: ReportCardPdfStatus
 }
 
 export interface ReportDelivery {
@@ -130,15 +126,4 @@ export interface ReportDelivery {
   status: ReportDeliveryStatus
   errorMessage?: string
   sentAt?: Date
-}
-
-export interface ZohoSyncLog {
-  id: string
-  entityType: string
-  entityId: string
-  zohoId?: string
-  action: string
-  status: ZohoSyncStatus
-  errorMessage?: string
-  createdAt: Date
 }

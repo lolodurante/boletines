@@ -1,10 +1,24 @@
 import { reportCardPdfDataSchema, type ReportCardPdfData } from "./report-card-data.schema"
-import { renderReportCardTemplate } from "./report-card-template"
 
 export interface GeneratedPdf {
   fileName: string
   buffer: Buffer
   url: string
+}
+
+const PAGE_WIDTH = 595
+const PAGE_HEIGHT = 842
+const MARGIN = 28
+const CONTENT_WIDTH = PAGE_WIDTH - MARGIN * 2
+const TOP_Y = PAGE_HEIGHT - MARGIN
+const BOTTOM_Y = MARGIN
+const DEFAULT_LEVELS = ["DESTACADO", "AVANZADO", "ALCANZADO", "EN PROCESO", "NO ALCANZÓ LOS OBJETIVOS"]
+
+type Font = "regular" | "bold"
+
+interface PdfPage {
+  commands: string[]
+  y: number
 }
 
 function sanitizeFilePart(value: string) {
@@ -16,23 +30,42 @@ function sanitizeFilePart(value: string) {
     .replace(/^-+|-+$/g, "")
 }
 
-function escapePdfText(value: string) {
+function normalizeText(value: string) {
   return value
-    .replace(/[\r\t]/g, " ")
-    .replace(/[^\x20-\x7E\n]/g, "")
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/[–—]/g, "-")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function normalizeLabel(value: string) {
+  return normalizeText(value)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toUpperCase()
+}
+
+function escapePdfText(value: string) {
+  return normalizeText(value)
+    .replace(/[^\x20-\xFF]/g, "")
     .replace(/\\/g, "\\\\")
     .replace(/\(/g, "\\(")
     .replace(/\)/g, "\\)")
 }
 
-function wrapLine(line: string, maxLength = 92) {
-  const words = line.split(/\s+/).filter(Boolean)
+function textWidth(value: string, fontSize: number) {
+  return normalizeText(value).length * fontSize * 0.5
+}
+
+function wrapText(value: string, maxWidth: number, fontSize: number) {
+  const words = normalizeText(value).split(/\s+/).filter(Boolean)
   const lines: string[] = []
   let current = ""
 
   for (const word of words) {
     const next = current ? `${current} ${word}` : word
-    if (next.length > maxLength && current) {
+    if (textWidth(next, fontSize) > maxWidth && current) {
       lines.push(current)
       current = word
     } else {
@@ -44,38 +77,208 @@ function wrapLine(line: string, maxLength = 92) {
   return lines.length ? lines : [""]
 }
 
-function createPdfBuffer(text: string) {
-  const pageLines = text
-    .split("\n")
-    .flatMap((line) => wrapLine(line))
-    .slice(0, 54)
+function rect(x: number, y: number, width: number, height: number, fill?: string) {
+  const fillCommand = fill ? `${fill} rg ${x} ${y} ${width} ${height} re f` : ""
+  return ["q", fillCommand, "0 0 0 RG", "0.7 w", `${x} ${y} ${width} ${height} re S`, "Q"].filter(Boolean).join("\n")
+}
 
-  const textCommands = [
-    "BT",
-    "/F1 11 Tf",
-    "50 790 Td",
-    "14 TL",
-    ...pageLines.map((line, index) => `${index === 0 ? "" : "T* "}${`(${escapePdfText(line)}) Tj`}`.trim()),
-    "ET",
-  ].join("\n")
+function text(value: string, x: number, y: number, options: { size?: number; font?: Font; align?: "left" | "center" } = {}) {
+  const size = options.size ?? 10
+  const font = options.font === "bold" ? "F2" : "F1"
+  const textX = options.align === "center" ? x - textWidth(value, size) / 2 : x
+  return `BT /${font} ${size} Tf 1 0 0 1 ${textX.toFixed(2)} ${y.toFixed(2)} Tm (${escapePdfText(value)}) Tj ET`
+}
+
+function addWrappedText(page: PdfPage, value: string, x: number, y: number, maxWidth: number, options: { size?: number; font?: Font } = {}) {
+  const size = options.size ?? 10
+  wrapText(value, maxWidth, size).forEach((line, index) => {
+    page.commands.push(text(line, x, y - index * (size + 3), { size, font: options.font }))
+  })
+}
+
+function addPage(pages: PdfPage[]): PdfPage {
+  const page: PdfPage = { commands: [], y: TOP_Y }
+  pages.push(page)
+  return page
+}
+
+function addDocumentHeader(page: PdfPage, data: ReportCardPdfData) {
+  const period = normalizeText(data.period.name).toUpperCase()
+  const course = `${data.student.grade}${data.student.division ? ` ${data.student.division}` : ""}`
+
+  page.commands.push(rect(MARGIN, page.y - 28, CONTENT_WIDTH, 28))
+  page.commands.push(text(`COLEGIO LABARDÉN - BOLETÍN ${period}`, PAGE_WIDTH / 2, page.y - 18, {
+    size: 13,
+    font: "bold",
+    align: "center",
+  }))
+  page.y -= 28
+
+  page.commands.push(rect(MARGIN, page.y - 25, CONTENT_WIDTH, 25))
+  page.commands.push(text(`NOMBRE DEL ALUMNO: ${data.student.fullName}`, MARGIN + 8, page.y - 17, { size: 11, font: "bold" }))
+  page.commands.push(text(`CURSO: ${course}`, PAGE_WIDTH - MARGIN - 115, page.y - 17, { size: 11, font: "bold" }))
+  page.y -= 25
+}
+
+function getLevelLabels(data: ReportCardPdfData) {
+  const found = new Map(DEFAULT_LEVELS.map((level) => [normalizeLabel(level), level]))
+
+  for (const subject of data.subjects) {
+    for (const criterion of subject.criteria) {
+      const label = normalizeLabel(criterion.gradeLabel)
+      if (!found.has(label)) found.set(label, label)
+    }
+  }
+
+  return Array.from(found.values())
+}
+
+function addTableHeader(page: PdfPage, levelLabels: string[]) {
+  const indicatorWidth = levelLabels.length <= 5 ? 245 : 220
+  const levelWidth = (CONTENT_WIDTH - indicatorWidth) / levelLabels.length
+  const rowHeight = 37
+
+  page.commands.push(rect(MARGIN, page.y - rowHeight, indicatorWidth, rowHeight, "0.93 0.93 0.93"))
+  page.commands.push(text("Indicadores de logro en las áreas", MARGIN + indicatorWidth / 2, page.y - 22, {
+    size: 10,
+    font: "bold",
+    align: "center",
+  }))
+
+  levelLabels.forEach((label, index) => {
+    const x = MARGIN + indicatorWidth + index * levelWidth
+    page.commands.push(rect(x, page.y - rowHeight, levelWidth, rowHeight, "0.93 0.93 0.93"))
+    wrapText(label, levelWidth - 8, 8).slice(0, 3).forEach((line, lineIndex) => {
+      page.commands.push(text(line, x + levelWidth / 2, page.y - 13 - lineIndex * 10, {
+        size: 8,
+        font: "bold",
+        align: "center",
+      }))
+    })
+  })
+
+  page.y -= rowHeight
+}
+
+function ensureSpace(pages: PdfPage[], minHeight: number, data: ReportCardPdfData, levelLabels: string[]) {
+  let page = pages[pages.length - 1]
+  if (!page) page = addPage(pages)
+  if (page.y - minHeight >= BOTTOM_Y) return page
+
+  page = addPage(pages)
+  addDocumentHeader(page, data)
+  addTableHeader(page, levelLabels)
+  return page
+}
+
+function addSubjectSection(page: PdfPage, subjectName: string, teacherName: string) {
+  const height = 24
+  page.commands.push(rect(MARGIN, page.y - height, CONTENT_WIDTH, height, "0.82 0.82 0.82"))
+  page.commands.push(text(subjectName.toUpperCase(), MARGIN + 8, page.y - 16, { size: 10, font: "bold" }))
+  page.commands.push(text(`DOCENTE: ${teacherName}`, PAGE_WIDTH - MARGIN - 190, page.y - 16, { size: 9, font: "bold" }))
+  page.y -= height
+}
+
+function getCriterionRowHeight(criterion: ReportCardPdfData["subjects"][number]["criteria"][number], levelLabels: string[]) {
+  const indicatorWidth = levelLabels.length <= 5 ? 245 : 220
+  const observation = criterion.observation ? ` Observación: ${criterion.observation}` : ""
+  return Math.max(28, wrapText(`${criterion.name}${observation}`, indicatorWidth - 12, 9).length * 12 + 10)
+}
+
+function addCriterionRow(
+  page: PdfPage,
+  criterion: ReportCardPdfData["subjects"][number]["criteria"][number],
+  levelLabels: string[],
+) {
+  const indicatorWidth = levelLabels.length <= 5 ? 245 : 220
+  const levelWidth = (CONTENT_WIDTH - indicatorWidth) / levelLabels.length
+  const observation = criterion.observation ? ` Observación: ${criterion.observation}` : ""
+  const label = `${criterion.name}${observation}`
+  const rowHeight = getCriterionRowHeight(criterion, levelLabels)
+  const topY = page.y
+
+  page.commands.push(rect(MARGIN, topY - rowHeight, indicatorWidth, rowHeight))
+  addWrappedText(page, label, MARGIN + 6, topY - 14, indicatorWidth - 12, { size: 9 })
+
+  levelLabels.forEach((level, index) => {
+    const x = MARGIN + indicatorWidth + index * levelWidth
+    page.commands.push(rect(x, topY - rowHeight, levelWidth, rowHeight))
+    if (normalizeLabel(criterion.gradeLabel) === normalizeLabel(level)) {
+      page.commands.push(text("X", x + levelWidth / 2, topY - rowHeight / 2 - 4, {
+        size: 13,
+        font: "bold",
+        align: "center",
+      }))
+    }
+  })
+
+  page.y -= rowHeight
+}
+
+function addObservationRow(page: PdfPage, label: string, value: string) {
+  const textValue = `${label}: ${value}`
+  const rowHeight = Math.max(28, wrapText(textValue, CONTENT_WIDTH - 12, 9).length * 12 + 10)
+
+  page.commands.push(rect(MARGIN, page.y - rowHeight, CONTENT_WIDTH, rowHeight))
+  addWrappedText(page, textValue, MARGIN + 6, page.y - 14, CONTENT_WIDTH - 12, { size: 9, font: "bold" })
+  page.y -= rowHeight
+}
+
+function createPdfBuffer(data: ReportCardPdfData) {
+  const pages: PdfPage[] = []
+  let page = addPage(pages)
+  const levelLabels = getLevelLabels(data)
+
+  addDocumentHeader(page, data)
+  addTableHeader(page, levelLabels)
+
+  for (const subject of data.subjects) {
+    page = ensureSpace(pages, 60, data, levelLabels)
+    addSubjectSection(page, subject.subjectName, subject.teacherName)
+
+    for (const criterion of subject.criteria) {
+      page = ensureSpace(pages, getCriterionRowHeight(criterion, levelLabels), data, levelLabels)
+      addCriterionRow(page, criterion, levelLabels)
+    }
+  }
+
+  if (data.directorObservation) {
+    page = ensureSpace(pages, 42, data, levelLabels)
+    addObservationRow(page, "Observación", data.directorObservation)
+  }
+
+  const pageObjectIds: number[] = []
+  const contentObjects = pages.map((pdfPage) => pdfPage.commands.join("\n"))
+  for (const [index] of contentObjects.entries()) {
+    pageObjectIds.push(5 + index * 2)
+  }
 
   const objects = [
     "<< /Type /Catalog /Pages 2 0 R >>",
-    "<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
-    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
-    `<< /Length ${Buffer.byteLength(textCommands, "utf-8")} >>\nstream\n${textCommands}\nendstream`,
+    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
+    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
   ]
 
+  contentObjects.forEach((content, index) => {
+    const pageObjectId = pageObjectIds[index]!
+    const contentObjectId = pageObjectId + 1
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjectId} 0 R >>`,
+    )
+    objects.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`)
+  })
+
+  const header = "%PDF-1.4\n"
   let body = ""
   const offsets = [0]
+
   for (const [index, object] of objects.entries()) {
-    offsets.push(Buffer.byteLength(`%PDF-1.4\n${body}`, "utf-8"))
+    offsets.push(Buffer.byteLength(header + body, "latin1"))
     body += `${index + 1} 0 obj\n${object}\nendobj\n`
   }
 
-  const header = "%PDF-1.4\n"
-  const xrefOffset = Buffer.byteLength(header + body, "utf-8")
+  const xrefOffset = Buffer.byteLength(header + body, "latin1")
   const xref = [
     "xref",
     `0 ${objects.length + 1}`,
@@ -88,13 +291,12 @@ function createPdfBuffer(text: string) {
     "%%EOF",
   ].join("\n")
 
-  return Buffer.from(header + body + xref, "utf-8")
+  return Buffer.from(header + body + xref, "latin1")
 }
 
 export async function generateReportCardPdf(data: ReportCardPdfData): Promise<GeneratedPdf> {
   const parsed = reportCardPdfDataSchema.parse(data)
-  const content = renderReportCardTemplate(parsed)
-  const buffer = createPdfBuffer(content)
+  const buffer = createPdfBuffer(parsed)
   const fileName = `boletin-${sanitizeFilePart(parsed.student.fullName) || "alumno"}.pdf`
 
   return {

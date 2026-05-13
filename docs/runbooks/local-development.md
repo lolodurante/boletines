@@ -12,7 +12,6 @@
 ## Integraciones
 
 - Email real desactivado por defecto con `ENABLE_REAL_EMAIL_SENDING=false`.
-- Zoho usa mocks si faltan credenciales.
 - PDF genera un buffer stub hasta definir diseno final.
 - Prisma usa `prisma.config.ts`; no poner URLs dentro de `schema.prisma`.
 - En Supabase, usar pooler para runtime y conexion directa para migraciones.

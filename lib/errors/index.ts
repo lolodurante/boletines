@@ -39,7 +39,7 @@ export class MissingEmailError extends AppError {
 
 export class ReportCardNotReadyError extends AppError {
   constructor(reportCardId: string) {
-    super(`Report card ${reportCardId} is not ready`, "REPORT_CARD_NOT_READY", "El boletin todavia no esta listo para enviar.")
+    super(`Report card ${reportCardId} is not ready`, "REPORT_CARD_NOT_READY", "El boletin todavia no esta listo para generar.")
     this.name = "ReportCardNotReadyError"
   }
 }

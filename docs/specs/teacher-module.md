@@ -1,6 +1,6 @@
 # Modulo docente
 
-El docente ve cursos, materias y alumnos asignados. No puede configurar periodos ni enviar boletines.
+El docente ve cursos, materias y alumnos asignados. No puede configurar periodos ni generar boletines.
 
 ## Alcance inicial
 

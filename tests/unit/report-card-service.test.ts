@@ -1,16 +1,16 @@
 import { describe, expect, it } from "vitest"
-import { MissingEmailError, ReportCardNotReadyError } from "@/lib/errors"
+import { ReportCardNotReadyError } from "@/lib/errors"
 import { mockAssignments, mockEvaluations, mockReportCards, mockStudents } from "@/lib/mock-data"
-import { approveReportCard, blockIfMissingEmail, isReportCardReady, markReportCardAsSent } from "@/server/services/report-card-service"
+import { approveReportCard, blockIfMissingEmail, isReportCardReady, markReportCardPdfGenerated } from "@/server/services/report-card-service"
 
 describe("report-card-service", () => {
-  it("blocks report card when student has no family email", () => {
+  it("does not block report cards without family email", () => {
     const reportCard = mockReportCards[0]
     const student = mockStudents.find((item) => item.id === "student-2")
 
     expect(reportCard).toBeDefined()
     expect(student).toBeDefined()
-    expect(blockIfMissingEmail(reportCard!, student!).status).toBe("BLOCKED_MISSING_EMAIL")
+    expect(blockIfMissingEmail(reportCard!, student!).status).toBe(reportCard!.status)
   })
 
   it("marks report card ready only when every required evaluation is submitted", () => {
@@ -29,18 +29,17 @@ describe("report-card-service", () => {
     })).toBe(false)
   })
 
-  it("allows approved report cards to be marked as sent", () => {
-    const student = mockStudents[0]
+  it("allows ready report cards to generate a PDF", () => {
     const approved = { ...mockReportCards[0]!, status: "APPROVED" as const }
 
-    expect(markReportCardAsSent(approved, student!).status).toBe("SENT")
+    expect(markReportCardPdfGenerated(approved, "https://example.com/boletin.pdf").status).toBe("APPROVED")
+    expect(markReportCardPdfGenerated(approved, "https://example.com/boletin.pdf").pdfStatus).toBe("GENERATED")
   })
 
-  it("rejects sending when family email is missing", () => {
-    const student = mockStudents.find((item) => item.id === "student-2")
-    const approved = { ...mockReportCards[0]!, status: "APPROVED" as const }
+  it("rejects PDF generation if report card is not ready", () => {
+    const notReady = { ...mockReportCards[0]!, status: "NOT_READY" as const }
 
-    expect(() => markReportCardAsSent(approved, student!)).toThrow(MissingEmailError)
+    expect(() => markReportCardPdfGenerated(notReady, "https://example.com/boletin.pdf")).toThrow(ReportCardNotReadyError)
   })
 
   it("rejects approval if report card is not ready for review", () => {

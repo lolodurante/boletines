@@ -17,6 +17,9 @@
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
     "db:studio": "prisma studio",
+    "import:docentes:2026": "node scripts/import-docentes-primaria-2026.mjs",
+    "import:alumnos:2026": "node scripts/import-alumnos-2026.mjs",
+    "demo:boletines:2026": "node scripts/seed-demo-report-cards-2026.mjs",
     "validate": "npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {

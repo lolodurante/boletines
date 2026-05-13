@@ -17,25 +17,29 @@ export async function findStudentsByCourse(input: { grade: string; division: str
   })
 }
 
-export async function upsertStudentFromZoho(input: {
-  zohoId: string
+export async function upsertStudent(input: {
+  id?: string
   firstName: string
   lastName: string
   grade: string
   division: string
   familyEmail?: string
 }) {
-  return prisma.student.upsert({
-    where: { zohoId: input.zohoId },
-    create: {
-      zohoId: input.zohoId,
-      firstName: input.firstName,
-      lastName: input.lastName,
-      grade: input.grade,
-      division: input.division,
-      familyEmail: input.familyEmail,
-    },
-    update: {
+  if (input.id) {
+    return prisma.student.update({
+      where: { id: input.id },
+      data: {
+        firstName: input.firstName,
+        lastName: input.lastName,
+        grade: input.grade,
+        division: input.division,
+        familyEmail: input.familyEmail,
+      },
+    })
+  }
+
+  return prisma.student.create({
+    data: {
       firstName: input.firstName,
       lastName: input.lastName,
       grade: input.grade,

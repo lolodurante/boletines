@@ -22,20 +22,11 @@ import {
   AccordionTrigger,
 } from "@/components/ui/accordion"
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from "@/components/ui/dialog"
-import {
   Alert,
   AlertDescription,
   AlertTitle,
 } from "@/components/ui/alert"
-import { 
+import {
   CheckCircle2,
   AlertCircle,
   Save
@@ -154,7 +145,6 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
   const [autoSaveBlocked, setAutoSaveBlocked] = useState(false)
-  const [isConfirmDialogOpen, setIsConfirmDialogOpen] = useState(false)
   const gradeSourceKey = existingEvaluations
     .map((evaluation) => `${evaluation.id}:${evaluation.lastUpdated}:${Object.keys(evaluation.grades).length}`)
     .join("|")
@@ -230,37 +220,27 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     return true
   }, [activePeriod, canEdit, cursoId, generalObservation, grades, materiaId, observations, setAutoSaveBlocked, setIsDirty])
 
-  useEffect(() => {
-    if (!isDirty || isSaving || !canEdit || autoSaveBlocked) return
-    const timer = window.setTimeout(() => {
-      void saveGrades(false, { silent: true })
-    }, 1200)
-
-    return () => window.clearTimeout(timer)
-  }, [autoSaveBlocked, canEdit, isDirty, isSaving, saveGrades])
-
-  const handleSaveDraft = async () => {
-    const saved = await saveGrades(false)
-    if (saved) toast.success("Calificaciones guardadas correctamente")
-  }
-
-  const handleMarkComplete = async () => {
-    const saved = await saveGrades(true)
-    if (!saved) return
-
-    setIsConfirmDialogOpen(false)
-    toast.success("Calificaciones marcadas como completas", {
-      description: "El director podra revisar y enviar los boletines."
-    })
-  }
-
-  // Calculate completion stats
+  // Calculate completion stats (must be before the auto-save effect that reads isComplete)
   const totalCells = students.length * criteria.length
   const filledCells = Object.values(grades).reduce((acc, studentGrades) => {
     return acc + Object.values(studentGrades).filter(g => g && g !== "No evaluado").length
   }, 0)
   const completionPercentage = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0
   const isComplete = completionPercentage === 100
+
+  useEffect(() => {
+    if (!isDirty || isSaving || !canEdit || autoSaveBlocked) return
+    const timer = window.setTimeout(() => {
+      void saveGrades(isComplete, { silent: true })
+    }, 1200)
+
+    return () => window.clearTimeout(timer)
+  }, [autoSaveBlocked, canEdit, isDirty, isComplete, isSaving, saveGrades])
+
+  const handleSave = async () => {
+    const saved = await saveGrades(isComplete)
+    if (saved) toast.success("Calificaciones guardadas")
+  }
 
   if (isLoading) {
     return <div className="p-6 text-sm text-muted-foreground">Cargando calificaciones...</div>
@@ -305,7 +285,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
           <CheckCircle2 className="size-4 text-success" />
           <AlertTitle className="text-success">Evaluaciones completas</AlertTitle>
           <AlertDescription>
-            Todas las calificaciones han sido cargadas. Podes marcar como completo para que el director revise.
+            Todas las calificaciones están cargadas. El director ya puede revisar y generar el boletín.
           </AlertDescription>
         </Alert>
       )}
@@ -502,8 +482,11 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
         </CardContent>
       </Card>
 
+      {/* Spacer so sticky action bar doesn't occlude the last rows */}
+      <div className="h-20 lg:h-16 shrink-0" aria-hidden />
+
       {/* Action Bar */}
-      <div className="sticky bottom-0 -mx-4 flex flex-col gap-3 border-t bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
+      <div className="sticky bottom-0 z-20 -mx-4 flex flex-col gap-3 border-t bg-background px-4 py-4 sm:-mx-6 sm:px-6 lg:flex-row lg:items-center lg:justify-between">
         <div className="flex flex-col gap-1 text-sm text-muted-foreground sm:flex-row sm:items-center sm:gap-2">
           {isSaving && (
             <>
@@ -529,37 +512,10 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
             Completado: {filledCells}/{totalCells} ({completionPercentage}%)
           </span>
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          <Button variant="outline" onClick={handleSaveDraft} disabled={!canEdit || isSaving} className="w-full sm:w-auto">
-            <Save className="size-4 mr-2" />
-            Guardar borrador
-          </Button>
-          <Dialog open={isConfirmDialogOpen} onOpenChange={setIsConfirmDialogOpen}>
-            <DialogTrigger asChild>
-              <Button disabled={!isComplete || !canEdit || isSaving} className="w-full sm:w-auto">
-                <CheckCircle2 className="size-4 mr-2" />
-                Marcar como completo
-              </Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Confirmar entrega de calificaciones?</DialogTitle>
-                <DialogDescription>
-                  Una vez confirmado, el director podra revisar y enviar los boletines. 
-                  Podes solicitar edicion si necesitas hacer cambios.
-                </DialogDescription>
-              </DialogHeader>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => setIsConfirmDialogOpen(false)}>
-                  Cancelar
-                </Button>
-                <Button onClick={handleMarkComplete}>
-                  Confirmar
-                </Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </div>
+        <Button variant="outline" onClick={handleSave} disabled={!canEdit || isSaving} className="w-full sm:w-auto">
+          <Save className="size-4 mr-2" />
+          Guardar ahora
+        </Button>
       </div>
     </div>
   )

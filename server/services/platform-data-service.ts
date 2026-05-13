@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/db/client"
+import { courseIdFromParts, courseNameFromParts } from "@/lib/academic-course"
 import { getEmptyPlatformData, type PlatformData } from "@/lib/presentation-data"
 import { logWarning } from "@/lib/logger"
 import type { EvaluationStatus, GradeLevel, ReportStatus } from "@/lib/data"
@@ -42,22 +43,38 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         orderBy: { gradeFrom: "asc" },
       }),
     ])
+    const courses = await prisma.course.findMany({
+      where: { active: true },
+      orderBy: [{ grade: "asc" }, { division: "asc" }],
+    }).catch((error: unknown) => {
+      logWarning("Could not load courses catalog; deriving courses from students and assignments", {
+        reason: error instanceof Error ? error.message : "Unknown courses query error",
+      })
+      return []
+    })
 
-    const mappedStudents: PlatformData["students"] = students.map((student) => ({
+    const activeStudents = students.filter((student) => student.status === "ACTIVE")
+    const mappedStudents: PlatformData["students"] = activeStudents.map((student) => ({
       id: student.id,
       name: `${student.lastName}, ${student.firstName}`,
-      courseId: `c${student.grade.toLowerCase()}${student.division.toLowerCase()}`,
+      courseId: courseIdFromParts(student.grade, student.division),
       parentEmail: student.familyEmail,
     }))
-    const mappedCourses: PlatformData["courses"] = Array.from(
-      new Map(
-        students.map((student) => {
-          const id = `c${student.grade.toLowerCase()}${student.division.toLowerCase()}`
-          const name = `${student.grade}° ${student.division}`
-          return [id, { id, name, studentCount: students.filter((item) => item.grade === student.grade && item.division === student.division).length }]
-        }),
-      ).values(),
-    )
+    const activeCourseRecords = courses.length > 0
+      ? courses
+      : Array.from(
+          new Map(
+            [...activeStudents, ...assignments].map((item) => {
+              const id = courseIdFromParts(item.grade, item.division)
+              return [id, { grade: item.grade, division: item.division }]
+            }),
+          ).values(),
+        )
+    const mappedCourses: PlatformData["courses"] = activeCourseRecords.map((course) => ({
+      id: courseIdFromParts(course.grade, course.division),
+      name: courseNameFromParts(course.grade, course.division),
+      studentCount: activeStudents.filter((student) => student.grade === course.grade && student.division === course.division).length,
+    }))
     const mappedTeachers: PlatformData["teachers"] = teachers.map((teacher) => ({
       id: teacher.id,
       name: teacher.user.name,
@@ -85,17 +102,17 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     }))
     const mappedAssignments: PlatformData["courseAssignments"] = assignments.map((assignment) => ({
       teacherId: assignment.teacherId,
-      courseId: `c${assignment.grade.toLowerCase()}${assignment.division.toLowerCase()}`,
+      courseId: courseIdFromParts(assignment.grade, assignment.division),
       subjectId: assignment.subjectId,
       periodId: assignment.periodId,
     }))
     const mapReportStatus = (status: string): ReportStatus => {
       if (status === "NOT_READY") return "No listo"
       if (status === "READY_FOR_REVIEW") return "Listo para revisión"
-      if (status === "APPROVED") return "Pendiente de envío"
-      if (status === "SENT") return "Enviado"
+      if (status === "APPROVED") return "PDF generado"
+      if (status === "SENT") return "PDF generado"
       if (status === "NEEDS_REVISION") return "Requiere revisión"
-      if (status === "BLOCKED_MISSING_EMAIL") return "Sin correo registrado"
+      if (status === "BLOCKED_MISSING_EMAIL") return "No listo"
       return "No listo"
     }
     const mappedReportCards: PlatformData["reportCards"] = reportCards.map((reportCard) => ({
@@ -104,7 +121,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       periodId: reportCard.periodId,
       status: mapReportStatus(reportCard.status),
       completedDate: reportCard.updatedAt.toLocaleDateString("es-AR"),
-      sentDate: reportCard.sentAt?.toLocaleDateString("es-AR"),
+      generatedDate: reportCard.pdfUrl ? reportCard.updatedAt.toLocaleDateString("es-AR") : undefined,
       directorObservation: reportCard.directorObservation ?? undefined,
       pdfUrl: reportCard.pdfUrl ?? undefined,
     }))
@@ -116,7 +133,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     const mappedEvaluations: PlatformData["evaluations"] = evaluations.map((evaluation) => ({
       id: evaluation.id,
       studentId: evaluation.studentId,
-      courseId: `c${evaluation.student.grade.toLowerCase()}${evaluation.student.division.toLowerCase()}`,
+      courseId: courseIdFromParts(evaluation.student.grade, evaluation.student.division),
       subjectId: evaluation.subjectId,
       teacherId: evaluation.teacherId,
       periodId: evaluation.periodId,
@@ -160,6 +177,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         completedDate: reportCard.completedDate,
         status: reportCard.status,
         parentEmail: student?.parentEmail ?? null,
+        directorObservation: reportCard.directorObservation ?? undefined,
         pdfUrl: reportCard.pdfUrl,
         grades: relatedEvaluations.map((evaluation) => ({
           subjectName: mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.name ?? "—",
@@ -178,7 +196,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         studentName: student?.name ?? "Desconocido",
         courseName: mappedCourses.find((course) => course.id === student?.courseId)?.name ?? "—",
         periodName: mappedPeriods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
-        sentDate: reportCard.sentDate ?? null,
+        generatedDate: reportCard.generatedDate ?? null,
         status: reportCard.status,
         pdfUrl: reportCard.pdfUrl,
       }

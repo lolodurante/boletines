@@ -3,14 +3,13 @@ import { z } from "zod"
 import { prisma } from "@/lib/db/client"
 import { logWarning } from "@/lib/logger"
 import { generateReportCardPdf } from "@/server/services/pdf-service"
-import { sendReportCardEmail } from "@/server/services/email-service"
 import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
 export const dynamic = "force-dynamic"
 
 const reportCardActionSchema = z.discriminatedUnion("action", [
   z.object({
-    action: z.literal("send"),
+    action: z.literal("generate_pdf"),
     reportCardId: z.string().min(1),
     directorObservation: z.string().optional(),
   }),
@@ -79,9 +78,9 @@ export async function POST(request: Request) {
       return NextResponse.json({ ok: true, persisted: true, status: "Requiere revisión" })
     }
 
-    const sendInput = parsed.data
+    const generateInput = parsed.data
     const reportCard = await prisma.reportCard.findUnique({
-      where: { id: sendInput.reportCardId },
+      where: { id: generateInput.reportCardId },
       include: {
         student: true,
         period: true,
@@ -90,15 +89,8 @@ export async function POST(request: Request) {
     if (!reportCard) {
       return NextResponse.json({ error: "Boletin no encontrado" }, { status: 404 })
     }
-    if (reportCard.status !== "READY_FOR_REVIEW" && reportCard.status !== "APPROVED" && reportCard.status !== "SENT") {
-      return NextResponse.json({ error: "El boletin todavia no esta listo para enviar" }, { status: 400 })
-    }
-    if (!reportCard.student.familyEmail) {
-      await prisma.reportCard.update({
-        where: { id: reportCard.id },
-        data: { status: "BLOCKED_MISSING_EMAIL", zohoUploadStatus: "SKIPPED" },
-      })
-      return NextResponse.json({ error: "El alumno no tiene correo de tutor" }, { status: 400 })
+    if (reportCard.status !== "READY_FOR_REVIEW" && reportCard.status !== "APPROVED") {
+      return NextResponse.json({ error: "El boletin todavia no esta listo para generar" }, { status: 400 })
     }
 
     // Validate that all required course assignments have been submitted
@@ -107,6 +99,7 @@ export async function POST(request: Request) {
         grade: reportCard.student.grade,
         division: reportCard.student.division,
         periodId: reportCard.periodId,
+        subject: { active: true },
       },
       select: { teacherId: true, subjectId: true },
     })
@@ -125,7 +118,7 @@ export async function POST(request: Request) {
           ),
       )
       if (hasIncomplete) {
-        return NextResponse.json({ error: "El boletin tiene evaluaciones pendientes de envio" }, { status: 400 })
+        return NextResponse.json({ error: "El boletin tiene evaluaciones pendientes" }, { status: 400 })
       }
     }
 
@@ -133,16 +126,22 @@ export async function POST(request: Request) {
       where: {
         studentId: reportCard.studentId,
         periodId: reportCard.periodId,
+        status: { in: ["SUBMITTED", "APPROVED"] },
+        subject: { active: true },
       },
       include: {
         teacher: { include: { user: true } },
         subject: true,
-        grades: { include: { criterion: true, scaleLevel: true } },
+        grades: {
+          where: { criterion: { active: true } },
+          include: { criterion: true, scaleLevel: true },
+        },
       },
       orderBy: [{ subject: { name: "asc" } }],
     })
-    if (evaluations.length === 0 || evaluations.every((evaluation) => evaluation.grades.length === 0)) {
-      return NextResponse.json({ error: "El boletin no tiene evaluaciones completas para enviar" }, { status: 400 })
+    const evaluationsWithGrades = evaluations.filter((evaluation) => evaluation.grades.length > 0)
+    if (evaluationsWithGrades.length === 0) {
+      return NextResponse.json({ error: "El boletin no tiene evaluaciones completas para generar" }, { status: 400 })
     }
 
     const pdf = await generateReportCardPdf({
@@ -152,7 +151,7 @@ export async function POST(request: Request) {
         division: reportCard.student.division,
       },
       period: { name: reportCard.period.name },
-      subjects: evaluations.map((evaluation) => ({
+      subjects: evaluationsWithGrades.map((evaluation) => ({
         subjectName: evaluation.subject.name,
         teacherName: evaluation.teacher.user.name,
         criteria: evaluation.grades.map((grade) => ({
@@ -160,68 +159,25 @@ export async function POST(request: Request) {
           gradeLabel: grade.scaleLevel.label,
           observation: grade.observation ?? undefined,
         })),
-        teacherObservation: evaluation.generalObservation ?? undefined,
       })),
-      directorObservation: sendInput.directorObservation || undefined,
+      directorObservation: generateInput.directorObservation || undefined,
       branding: {
         primaryColor: "#2563eb",
         secondaryColor: "#64748b",
       },
     })
 
-    const email = await sendReportCardEmail({
-      to: reportCard.student.familyEmail,
-      studentName: `${reportCard.student.firstName} ${reportCard.student.lastName}`,
-      periodName: reportCard.period.name,
-      pdfUrl: pdf.url,
-      pdfFileName: pdf.fileName,
-      pdfBuffer: pdf.buffer,
-    })
-    const sentAt = new Date()
-
-    const emailDelivered = email.status === "SENT"
-
-    await prisma.$transaction(async (tx) => {
-      if (emailDelivered) {
-        await tx.reportCard.update({
-          where: { id: reportCard.id },
-          data: {
-            status: "SENT",
-            directorObservation: sendInput.directorObservation || null,
-            pdfUrl: pdf.url,
-            sentAt,
-          },
-        })
-
-        await tx.reportDelivery.create({
-          data: {
-            reportCardId: reportCard.id,
-            recipientEmail: reportCard.student.familyEmail,
-            status: "SENT",
-            sentAt,
-          },
-        })
-        return
-      }
-
-      await tx.reportDelivery.create({
-        data: {
-          reportCardId: reportCard.id,
-          recipientEmail: reportCard.student.familyEmail,
-          status: "FAILED",
-          errorMessage: email.errorMessage ?? (email.status === "SKIPPED" ? "Envio real deshabilitado." : "No se pudo enviar el correo."),
-        },
-      })
+    await prisma.reportCard.update({
+      where: { id: reportCard.id },
+      data: {
+        status: "APPROVED",
+        directorObservation: generateInput.directorObservation || null,
+        pdfUrl: pdf.url,
+        pdfStatus: "GENERATED",
+      },
     })
 
-    if (!emailDelivered) {
-      return NextResponse.json(
-        { error: email.errorMessage ?? "No se pudo enviar el correo" },
-        { status: 502 },
-      )
-    }
-
-    return NextResponse.json({ ok: true, persisted: true, status: "Enviado", pdfUrl: pdf.url })
+    return NextResponse.json({ ok: true, persisted: true, status: "PDF generado", pdfUrl: pdf.url })
   } catch (error) {
     logWarning("Could not update report card", {
       reason: error instanceof Error ? error.message : "Unknown report card action error",

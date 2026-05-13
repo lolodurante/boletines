@@ -1,4 +1,4 @@
-import { MissingEmailError, ReportCardNotReadyError } from "@/lib/errors"
+import { ReportCardNotReadyError } from "@/lib/errors"
 import type { CourseAssignment, Evaluation, ReportCard, Student } from "@/types/domain"
 
 export function isReportCardReady(input: { studentId: string; periodId: string; assignments: CourseAssignment[]; evaluations: Evaluation[] }) {
@@ -18,7 +18,7 @@ export function isReportCardReady(input: { studentId: string; periodId: string; 
 
 export function blockIfMissingEmail(reportCard: ReportCard, student: Student): ReportCard {
   if (student.familyEmail) return reportCard
-  return { ...reportCard, status: "BLOCKED_MISSING_EMAIL", zohoUploadStatus: "SKIPPED" }
+  return reportCard
 }
 
 export function approveReportCard(reportCard: ReportCard, directorObservation?: string): ReportCard {
@@ -29,10 +29,12 @@ export function approveReportCard(reportCard: ReportCard, directorObservation?: 
   return { ...reportCard, status: "APPROVED", directorObservation }
 }
 
-export function markReportCardAsSent(reportCard: ReportCard, student: Student): ReportCard {
-  if (!student.familyEmail) throw new MissingEmailError(student.id)
-  if (reportCard.status !== "APPROVED") throw new ReportCardNotReadyError(reportCard.id)
-  return { ...reportCard, status: "SENT", sentAt: new Date() }
+export function markReportCardPdfGenerated(reportCard: ReportCard, pdfUrl: string, directorObservation?: string): ReportCard {
+  if (reportCard.status !== "READY_FOR_REVIEW" && reportCard.status !== "APPROVED") {
+    throw new ReportCardNotReadyError(reportCard.id)
+  }
+
+  return { ...reportCard, status: "APPROVED", directorObservation, pdfUrl, pdfStatus: "GENERATED" }
 }
 
 export function buildReportCardContent(input: { student: Student; reportCard: ReportCard }) {

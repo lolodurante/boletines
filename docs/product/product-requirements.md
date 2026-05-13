@@ -5,8 +5,8 @@
 - Director: configura el sistema, revisa boletines, solicita correcciones, envia boletines y ve estadisticas.
 - Docente: carga evaluaciones para sus cursos, materias y alumnos asignados.
 - Alumno: sujeto evaluado.
-- Padre/tutor: destinatario del boletin por email.
-- Sistema/servicios externos: Zoho CRM, email provider, storage PDF.
+- Padre/tutor: destinatario del boletin por entrega externa al sistema.
+- Sistema/servicios externos: storage PDF.
 
 ## Director puede
 
@@ -21,8 +21,8 @@
 - Revisar boletines.
 - Agregar observacion del director.
 - Solicitar correccion a docente.
-- Enviar boletines.
-- Ver estadisticas de avance, distribucion y entrega.
+- Generar y aprobar boletines en PDF.
+- Ver estadisticas de avance y estado de boletines.
 
 ## Docente puede
 
@@ -41,8 +41,7 @@
 2. Docentes cargan evaluaciones.
 3. Si varios docentes evaluan al mismo alumno, el boletin queda listo solo cuando todos completan su parte.
 4. Director revisa boletines listos.
-5. Director puede enviar o pedir correccion.
+5. Director puede aprobar o pedir correccion.
 6. Sistema genera PDF.
-7. Sistema envia email.
-8. Sistema guarda PDF en Zoho CRM.
-9. Si falta email del tutor, mostrar alerta y bloquear envio de ese boletin.
+7. Sistema guarda URL/estado del PDF en la DB.
+8. La entrega a familias ocurre fuera de la app.

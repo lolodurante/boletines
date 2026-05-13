@@ -6,7 +6,7 @@ Aceptada.
 
 ## Contexto
 
-Zoho CRM queda como fuente unica de datos maestros. La app necesita una base propia para operar evaluaciones, borradores, boletines, entregas, observaciones y auditoria.
+La app necesita una base propia como fuente unica para alumnos, docentes, configuracion academica, evaluaciones, borradores, boletines, entregas, observaciones y auditoria.
 
 ## Decision
 
@@ -32,4 +32,4 @@ La configuracion usa Prisma 7:
 - Las rutas y servicios no deben acceder directo a Supabase desde UI.
 - El acceso a datos pasa por `server/repositories`.
 - Las migraciones Prisma deben ejecutarse contra `DIRECT_URL`.
-- Zoho sync debe hacer upserts idempotentes hacia la DB local.
+- Los datos academicos se administran en la DB local mediante pantallas, seeds o scripts idempotentes.
