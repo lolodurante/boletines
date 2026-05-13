@@ -66,6 +66,11 @@ enum ReportCardPdfStatus {
   SKIPPED
 }
 
+enum ReportCardType {
+  ESPANOL
+  INGLES
+}
+
 model User {
   id         String     @id @default(uuid()) @db.Uuid
   authUserId String?    @unique @map("auth_user_id")
@@ -132,6 +137,7 @@ model Teacher {
 model Subject {
   id         String   @id @default(uuid()) @db.Uuid
   name       String
+  type       ReportCardType @default(ESPANOL)
   gradeRange String[] @map("grade_range")
   active     Boolean  @default(true)
   createdAt  DateTime @default(now()) @map("created_at")
@@ -143,6 +149,7 @@ model Subject {
 
   @@unique([name])
   @@index([active])
+  @@index([type])
   @@map("subjects")
 }
 
@@ -290,6 +297,7 @@ model ReportCard {
   id                  String           @id @default(uuid()) @db.Uuid
   studentId           String           @map("student_id") @db.Uuid
   periodId            String           @map("period_id") @db.Uuid
+  type                ReportCardType   @default(ESPANOL)
   status              ReportCardStatus @default(NOT_READY)
   directorObservation String?          @map("director_observation")
   pdfUrl              String?          @map("pdf_url")
@@ -302,9 +310,10 @@ model ReportCard {
   period     AcademicPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
   deliveries ReportDelivery[]
 
-  @@unique([studentId, periodId])
+  @@unique([studentId, periodId, type])
   @@index([studentId])
   @@index([periodId])
+  @@index([type])
   @@index([status])
   @@index([pdfStatus])
   @@map("report_cards")

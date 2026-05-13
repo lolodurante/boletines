@@ -9,6 +9,8 @@ export type ReportStatus =
   | "PDF generado"
   | "Requiere revisión"
 
+export type ReportCardType = "ESPANOL" | "INGLES"
+
 export type PeriodStatus = "Activo" | "Cerrado" | "Próximo"
 
 export interface Period {
@@ -40,6 +42,7 @@ export interface GradeCriteria {
 export interface Subject {
   id: string
   name: string
+  reportType: ReportCardType
   appliesTo: string[]
   criteriaByGrade: GradeCriteria[]
 }
@@ -76,6 +79,7 @@ export interface ReportCard {
   id: string
   studentId: string
   periodId: string
+  reportType: ReportCardType
   status: ReportStatus
   generatedDate?: string
   completedDate: string
@@ -135,6 +139,7 @@ export const subjects: Subject[] = [
   { 
     id: "s1", 
     name: "Lengua", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [
@@ -172,6 +177,7 @@ export const subjects: Subject[] = [
   { 
     id: "s2", 
     name: "Matemática", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [
@@ -204,6 +210,7 @@ export const subjects: Subject[] = [
   { 
     id: "s3", 
     name: "Ciencias Naturales", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "cn1a", name: "Observación del entorno", description: "Observa y describe seres vivos" }]},
@@ -221,6 +228,7 @@ export const subjects: Subject[] = [
   { 
     id: "s4", 
     name: "Ciencias Sociales", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "cs1a", name: "Familia y comunidad", description: "Reconoce roles familiares" }]},
@@ -238,6 +246,7 @@ export const subjects: Subject[] = [
   { 
     id: "s5", 
     name: "Formación Ética y Ciudadana", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "fe1a", name: "Convivencia básica", description: "Respeta turnos y comparte" }]},
@@ -255,6 +264,7 @@ export const subjects: Subject[] = [
   { 
     id: "s6", 
     name: "Arte", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "ar1a", name: "Exploración plástica", description: "Experimenta con materiales" }]},
@@ -272,6 +282,7 @@ export const subjects: Subject[] = [
   { 
     id: "s7", 
     name: "Educación Física", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "ef1a", name: "Motricidad básica", description: "Corre, salta y lanza" }]},
@@ -289,6 +300,7 @@ export const subjects: Subject[] = [
   { 
     id: "s8", 
     name: "Música", 
+    reportType: "ESPANOL",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "mu1a", name: "Canto", description: "Canta canciones infantiles" }]},
@@ -306,6 +318,7 @@ export const subjects: Subject[] = [
   { 
     id: "s9", 
     name: "Inglés", 
+    reportType: "INGLES",
     appliesTo: ["1°", "2°", "3°", "4°", "5°", "6°"],
     criteriaByGrade: [
       { grade: "1°", criteria: [{ id: "in1a", name: "Vocabulario inicial", description: "Conoce palabras básicas" }]},
@@ -454,6 +467,7 @@ export const reportCards: ReportCard[] = [
     id: "rc1",
     studentId: "st1",
     periodId: "p2",
+    reportType: "ESPANOL",
     status: "Listo para revisión",
     completedDate: "hace 3 horas"
   },
@@ -461,6 +475,7 @@ export const reportCards: ReportCard[] = [
     id: "rc2",
     studentId: "st3",
     periodId: "p2",
+    reportType: "ESPANOL",
     status: "Listo para revisión",
     completedDate: "hace 5 horas"
   },
@@ -468,6 +483,7 @@ export const reportCards: ReportCard[] = [
     id: "rc3",
     studentId: "st4",
     periodId: "p2",
+    reportType: "ESPANOL",
     status: "Listo para revisión",
     completedDate: "hace 2 horas"
   },
@@ -475,6 +491,7 @@ export const reportCards: ReportCard[] = [
     id: "rc4",
     studentId: "st5",
     periodId: "p2",
+    reportType: "ESPANOL",
     status: "PDF generado",
     completedDate: "hace 1 día",
     generatedDate: "hace 1 día"
@@ -483,6 +500,7 @@ export const reportCards: ReportCard[] = [
     id: "rc5",
     studentId: "st6",
     periodId: "p2",
+    reportType: "ESPANOL",
     status: "Requiere revisión",
     completedDate: "hace 4 horas"
   },

@@ -39,11 +39,16 @@ interface HistorialRow {
   id: string
   studentId: string
   studentName: string
+  reportType: "ESPANOL" | "INGLES"
   courseName: string
   periodName: string
   generatedDate: string | null
   status: ReportStatus
   pdfUrl?: string
+}
+
+function getReportTypeLabel(reportType: HistorialRow["reportType"]) {
+  return reportType === "INGLES" ? "Inglés" : "Español"
 }
 
 export default function HistorialPage() {
@@ -194,6 +199,7 @@ export default function HistorialPage() {
             <TableHeader>
               <TableRow>
                 <TableHead>Alumno</TableHead>
+                <TableHead>Boletín</TableHead>
                 <TableHead>Curso</TableHead>
                 <TableHead>Periodo</TableHead>
                 <TableHead>Fecha de PDF</TableHead>
@@ -205,6 +211,9 @@ export default function HistorialPage() {
               {filteredData.map((row) => (
                 <TableRow key={row.id}>
                   <TableCell className="font-medium">{row.studentName}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline">{getReportTypeLabel(row.reportType)}</Badge>
+                  </TableCell>
                   <TableCell>{row.courseName}</TableCell>
                   <TableCell>{row.periodName}</TableCell>
                   <TableCell className="text-muted-foreground">
@@ -235,7 +244,7 @@ export default function HistorialPage() {
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" asChild>
-                        <Link href={`/director/boletines?student=${row.studentId}`}>
+                        <Link href={`/director/boletines?student=${row.studentId}&report=${row.id}`}>
                           <MessageSquare className="size-4 mr-1.5" />
                           Revisar
                         </Link>

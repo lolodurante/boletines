@@ -12,6 +12,7 @@ export type ReportCardStatus =
   | "BLOCKED_MISSING_EMAIL"
 export type ReportDeliveryStatus = "PENDING" | "SENT" | "FAILED" | "BLOCKED"
 export type ReportCardPdfStatus = "PENDING" | "GENERATED" | "FAILED" | "SKIPPED"
+export type ReportCardType = "ESPANOL" | "INGLES"
 
 export interface User {
   id: string
@@ -41,6 +42,7 @@ export interface Teacher {
 export interface Subject {
   id: string
   name: string
+  type: ReportCardType
   gradeRange: string[]
   active: boolean
 }
@@ -112,6 +114,7 @@ export interface ReportCard {
   id: string
   studentId: string
   periodId: string
+  type: ReportCardType
   status: ReportCardStatus
   directorObservation?: string
   pdfUrl?: string

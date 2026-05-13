@@ -84,6 +84,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     const mappedSubjects: PlatformData["subjects"] = subjects.map((subject) => ({
       id: subject.id,
       name: subject.name,
+      reportType: subject.type,
       appliesTo: subject.gradeRange.map((grade) => `${grade}°`),
       criteriaByGrade: subject.gradeRange.map((grade) => ({
         grade: `${grade}°`,
@@ -119,6 +120,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       id: reportCard.id,
       studentId: reportCard.studentId,
       periodId: reportCard.periodId,
+      reportType: reportCard.type,
       status: mapReportStatus(reportCard.status),
       completedDate: reportCard.updatedAt.toLocaleDateString("es-AR"),
       generatedDate: reportCard.pdfUrl ? reportCard.updatedAt.toLocaleDateString("es-AR") : undefined,
@@ -163,7 +165,10 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       const student = mappedStudents.find((item) => item.id === reportCard.studentId)
       const period = mappedPeriods.find((item) => item.id === reportCard.periodId)
       const relatedEvaluations = mappedEvaluations.filter(
-        (evaluation) => evaluation.studentId === reportCard.studentId && evaluation.periodId === reportCard.periodId,
+        (evaluation) =>
+          evaluation.studentId === reportCard.studentId &&
+          evaluation.periodId === reportCard.periodId &&
+          mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.reportType === reportCard.reportType,
       )
 
       return {
@@ -172,6 +177,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         studentName: student?.name ?? "Desconocido",
         periodId: reportCard.periodId,
         periodName: period?.name ?? "—",
+        reportType: reportCard.reportType,
         courseId: student?.courseId ?? "",
         courseName: mappedCourses.find((course) => course.id === student?.courseId)?.name ?? "—",
         completedDate: reportCard.completedDate,
@@ -194,6 +200,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         id: reportCard.id,
         studentId: reportCard.studentId,
         studentName: student?.name ?? "Desconocido",
+        reportType: reportCard.reportType,
         courseName: mappedCourses.find((course) => course.id === student?.courseId)?.name ?? "—",
         periodName: mappedPeriods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
         generatedDate: reportCard.generatedDate ?? null,

@@ -51,6 +51,7 @@ interface ReportCardData {
   studentName: string
   periodId: string
   periodName: string
+  reportType: "ESPANOL" | "INGLES"
   courseId: string
   courseName: string
   completedDate: string
@@ -65,6 +66,10 @@ interface ReportCardData {
     criteria: Array<{ name: string; grade: GradeLevel }>
     observation?: string
   }>
+}
+
+function getReportTypeLabel(reportType: ReportCardData["reportType"]) {
+  return reportType === "INGLES" ? "Inglés" : "Español"
 }
 
 export default function BoletinesPage() {
@@ -99,8 +104,11 @@ export default function BoletinesPage() {
   }, [selectedReport?.directorObservation, selectedReport?.id])
 
   useEffect(() => {
+    const reportId = searchParams.get("report")
     const studentId = searchParams.get("student")
-    const requestedReport = studentId
+    const requestedReport = reportId
+      ? dynamicReportCardsData.find((report) => report.id === reportId)
+      : studentId
       ? dynamicReportCardsData.find((report) => report.studentId === studentId)
       : undefined
 
@@ -156,7 +164,7 @@ export default function BoletinesPage() {
     if (result?.pdfUrl) {
       const link = document.createElement("a")
       link.href = result.pdfUrl
-      link.download = `boletin-${selectedReport.studentName.replace(/,\s*/g, "-").replace(/\s+/g, "-").toLowerCase()}.pdf`
+      link.download = `boletin-${getReportTypeLabel(selectedReport.reportType).toLowerCase()}-${selectedReport.studentName.replace(/,\s*/g, "-").replace(/\s+/g, "-").toLowerCase()}.pdf`
       link.click()
     }
 
@@ -250,7 +258,7 @@ export default function BoletinesPage() {
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{report.studentName}</p>
                         <p className="text-xs text-muted-foreground truncate">
-                          {report.courseName}
+                          {report.courseName} • {getReportTypeLabel(report.reportType)}
                         </p>
                       </div>
                       <div className={cn(
@@ -280,7 +288,7 @@ export default function BoletinesPage() {
               <CardHeader>
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div>
-                    <CardTitle>Boletin — {selectedReport.studentName}</CardTitle>
+                    <CardTitle>Boletin {getReportTypeLabel(selectedReport.reportType)} — {selectedReport.studentName}</CardTitle>
                     <CardDescription>
                       {selectedReport.courseName} • {selectedReport.periodName}
                     </CardDescription>
@@ -294,7 +302,11 @@ export default function BoletinesPage() {
                 <div className="rounded-lg border">
                   {/* Student Info */}
                   <div className="border-b bg-muted/50 p-4">
-                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-3 sm:gap-4">
+                    <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-4 sm:gap-4">
+                      <div>
+                        <span className="text-muted-foreground">Boletín:</span>
+                        <p className="font-medium">{getReportTypeLabel(selectedReport.reportType)}</p>
+                      </div>
                       <div>
                         <span className="text-muted-foreground">Alumno:</span>
                         <p className="font-medium">{selectedReport.studentName}</p>

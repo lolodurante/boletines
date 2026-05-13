@@ -44,7 +44,7 @@ export async function POST(request: Request) {
       const revisionInput = parsed.data
       const reportCard = await prisma.reportCard.findUnique({
         where: { id: revisionInput.reportCardId },
-        select: { id: true, studentId: true, periodId: true },
+        select: { id: true, studentId: true, periodId: true, type: true },
       })
       if (!reportCard) {
         return NextResponse.json({ error: "Boletin no encontrado" }, { status: 404 })
@@ -56,6 +56,7 @@ export async function POST(request: Request) {
             studentId: reportCard.studentId,
             periodId: reportCard.periodId,
             teacherId: revisionInput.teacherId,
+            subject: { type: reportCard.type },
           },
           data: { status: "NEEDS_REVISION" },
         })
@@ -99,7 +100,7 @@ export async function POST(request: Request) {
         grade: reportCard.student.grade,
         division: reportCard.student.division,
         periodId: reportCard.periodId,
-        subject: { active: true },
+        subject: { active: true, type: reportCard.type },
       },
       select: { teacherId: true, subjectId: true },
     })
@@ -127,7 +128,7 @@ export async function POST(request: Request) {
         studentId: reportCard.studentId,
         periodId: reportCard.periodId,
         status: { in: ["SUBMITTED", "APPROVED"] },
-        subject: { active: true },
+        subject: { active: true, type: reportCard.type },
       },
       include: {
         teacher: { include: { user: true } },

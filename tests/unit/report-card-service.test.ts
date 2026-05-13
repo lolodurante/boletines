@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { ReportCardNotReadyError } from "@/lib/errors"
-import { mockAssignments, mockEvaluations, mockReportCards, mockStudents } from "@/lib/mock-data"
+import { mockAssignments, mockEvaluations, mockReportCards, mockStudents, mockSubjects } from "@/lib/mock-data"
 import { approveReportCard, blockIfMissingEmail, isReportCardReady, markReportCardPdfGenerated } from "@/server/services/report-card-service"
 
 describe("report-card-service", () => {
@@ -19,6 +19,8 @@ describe("report-card-service", () => {
       periodId: "period-2026-t1",
       assignments: mockAssignments,
       evaluations: mockEvaluations,
+      subjects: mockSubjects,
+      reportType: "ESPANOL",
     })).toBe(true)
 
     expect(isReportCardReady({
@@ -26,6 +28,39 @@ describe("report-card-service", () => {
       periodId: "period-2026-t1",
       assignments: mockAssignments,
       evaluations: mockEvaluations,
+      subjects: mockSubjects,
+      reportType: "ESPANOL",
+    })).toBe(false)
+  })
+
+  it("keeps report card readiness independent by report type", () => {
+    expect(isReportCardReady({
+      studentId: "student-1",
+      periodId: "period-2026-t1",
+      assignments: mockAssignments,
+      evaluations: mockEvaluations,
+      subjects: mockSubjects,
+      reportType: "ESPANOL",
+    })).toBe(true)
+
+    expect(isReportCardReady({
+      studentId: "student-1",
+      periodId: "period-2026-t1",
+      assignments: mockAssignments,
+      evaluations: mockEvaluations,
+      subjects: mockSubjects,
+      reportType: "INGLES",
+    })).toBe(false)
+  })
+
+  it("does not mark a report type ready when the course has no assignments for that type", () => {
+    expect(isReportCardReady({
+      studentId: "student-1",
+      periodId: "period-2026-t1",
+      assignments: mockAssignments.filter((assignment) => assignment.subjectId !== "subject-ingles"),
+      evaluations: mockEvaluations,
+      subjects: mockSubjects,
+      reportType: "INGLES",
     })).toBe(false)
   })
 

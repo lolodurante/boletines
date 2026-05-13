@@ -8,13 +8,14 @@ export const dynamic = "force-dynamic"
 
 const criterionSchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string().optional(),
+  name: z.string().trim().min(1),
+  description: z.string().trim().optional(),
 })
 
 const subjectSchema = z.object({
   id: z.string().min(1),
-  name: z.string().min(1),
+  name: z.string().trim().min(1),
+  reportType: z.enum(["ESPANOL", "INGLES"]).default("ESPANOL"),
   appliesTo: z.array(z.string().min(1)).min(1),
   criteriaByGrade: z.array(
     z.object({
@@ -101,10 +102,12 @@ export async function POST(request: Request) {
               where: { id: subject.id },
               create: {
                 name: subject.name,
+                type: subject.reportType,
                 gradeRange,
               },
               update: {
                 name: subject.name,
+                type: subject.reportType,
                 gradeRange,
                 active: true,
               },
@@ -114,50 +117,63 @@ export async function POST(request: Request) {
               where: { name: subject.name },
               create: {
                 name: subject.name,
+                type: subject.reportType,
                 gradeRange,
               },
               update: {
+                type: subject.reportType,
                 gradeRange,
                 active: true,
               },
               select: { id: true },
             })
 
+        const criteriaByKey = new Map<
+          string,
+          { id: string; name: string; description?: string; gradeRange: string[] }
+        >()
         const activeCriterionIds: string[] = []
         for (const gradeCriteria of subject.criteriaByGrade) {
           const grade = normalizeGrade(gradeCriteria.grade)
           if (!activeGrades.has(grade)) continue
 
           for (const criterion of gradeCriteria.criteria) {
-            const savedCriterion = isUuid(criterion.id)
-              ? await tx.evaluationCriterion.upsert({
-                  where: { id: criterion.id },
-                  create: {
-                    subjectId: savedSubject.id,
-                    name: criterion.name,
-                    description: criterion.description || criterion.name,
-                    gradeRange: [grade],
-                  },
-                  update: {
-                    name: criterion.name,
-                    description: criterion.description || criterion.name,
-                    gradeRange: [grade],
-                    active: true,
-                  },
-                  select: { id: true },
-                })
-              : await tx.evaluationCriterion.create({
-                  data: {
-                    subjectId: savedSubject.id,
-                    name: criterion.name,
-                    description: criterion.description || criterion.name,
-                    gradeRange: [grade],
-                  },
-                  select: { id: true },
-                })
+            const key = criterion.id
+            const existing = criteriaByKey.get(key)
+            if (existing) {
+              existing.name = criterion.name
+              existing.description = criterion.description
+              if (!existing.gradeRange.includes(grade)) existing.gradeRange.push(grade)
+              continue
+            }
 
-            activeCriterionIds.push(savedCriterion.id)
+            criteriaByKey.set(key, {
+              id: criterion.id,
+              name: criterion.name,
+              description: criterion.description,
+              gradeRange: [grade],
+            })
           }
+        }
+
+        for (const criterion of criteriaByKey.values()) {
+          const data = {
+            subjectId: savedSubject.id,
+            name: criterion.name,
+            description: criterion.description || criterion.name,
+            gradeRange: criterion.gradeRange,
+            active: true,
+          }
+          const savedCriterion = isUuid(criterion.id)
+            ? await tx.evaluationCriterion.upsert({
+                where: { id: criterion.id },
+                create: data,
+                update: data,
+                select: { id: true },
+              })
+            : await tx.evaluationCriterion.create({ data, select: { id: true } })
+
+          activeCriterionIds.push(savedCriterion.id)
         }
 
         await tx.evaluationCriterion.updateMany({

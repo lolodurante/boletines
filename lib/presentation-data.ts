@@ -16,6 +16,7 @@ import {
   teachers,
   type EvaluationStatus,
   type GradeLevel,
+  type ReportCardType,
   type ReportStatus,
 } from "@/lib/data"
 
@@ -40,6 +41,7 @@ export interface DirectorReportCardData {
   studentName: string
   periodId: string
   periodName: string
+  reportType: ReportCardType
   courseId: string
   courseName: string
   completedDate: string
@@ -60,6 +62,7 @@ export interface ReportHistoryRow {
   id: string
   studentId: string
   studentName: string
+  reportType: ReportCardType
   courseName: string
   periodName: string
   generatedDate: string | null
@@ -131,7 +134,10 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
     const student = students.find((item) => item.id === reportCard.studentId)
     const period = periods.find((item) => item.id === reportCard.periodId)
     const relatedEvaluations = evaluations.filter(
-      (evaluation) => evaluation.studentId === reportCard.studentId && evaluation.periodId === reportCard.periodId,
+      (evaluation) =>
+        evaluation.studentId === reportCard.studentId &&
+        evaluation.periodId === reportCard.periodId &&
+        getSubjectById(evaluation.subjectId)?.reportType === reportCard.reportType,
     )
 
     return {
@@ -140,6 +146,7 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
       studentName: student?.name ?? "Desconocido",
       periodId: reportCard.periodId,
       periodName: period?.name ?? "—",
+      reportType: reportCard.reportType,
       courseId: student?.courseId ?? "",
       courseName: student ? (getCourseById(student.courseId)?.name ?? "—") : "—",
       completedDate: reportCard.completedDate,
@@ -162,6 +169,7 @@ function buildReportHistory(): ReportHistoryRow[] {
     id: reportCard.id,
     studentId: reportCard.studentId,
     studentName: students.find((student) => student.id === reportCard.studentId)?.name ?? "Desconocido",
+    reportType: reportCard.reportType,
     courseName: courseNameForStudent(reportCard.studentId),
     periodName: periods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
     generatedDate: reportCard.generatedDate ?? null,

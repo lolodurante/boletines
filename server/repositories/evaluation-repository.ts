@@ -17,11 +17,12 @@ export async function findEvaluationWithGrades(id: string) {
   })
 }
 
-export async function findEvaluationsForReportCard(input: { studentId: string; periodId: string }) {
+export async function findEvaluationsForReportCard(input: { studentId: string; periodId: string; type?: "ESPANOL" | "INGLES" }) {
   return prisma.evaluation.findMany({
     where: {
       studentId: input.studentId,
       periodId: input.periodId,
+      subject: input.type ? { type: input.type } : undefined,
     },
     include: {
       grades: {

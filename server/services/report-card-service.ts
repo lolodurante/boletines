@@ -1,8 +1,20 @@
 import { ReportCardNotReadyError } from "@/lib/errors"
-import type { CourseAssignment, Evaluation, ReportCard, Student } from "@/types/domain"
+import type { CourseAssignment, Evaluation, ReportCard, ReportCardType, Student, Subject } from "@/types/domain"
 
-export function isReportCardReady(input: { studentId: string; periodId: string; assignments: CourseAssignment[]; evaluations: Evaluation[] }) {
-  const requiredAssignments = input.assignments.filter((assignment) => assignment.periodId === input.periodId)
+export function isReportCardReady(input: {
+  studentId: string
+  periodId: string
+  assignments: CourseAssignment[]
+  evaluations: Evaluation[]
+  subjects?: Pick<Subject, "id" | "type">[]
+  reportType?: ReportCardType
+}) {
+  const subjectTypeById = new Map(input.subjects?.map((subject) => [subject.id, subject.type]) ?? [])
+  const requiredAssignments = input.assignments.filter((assignment) => {
+    if (assignment.periodId !== input.periodId) return false
+    if (!input.reportType) return true
+    return subjectTypeById.get(assignment.subjectId) === input.reportType
+  })
   if (requiredAssignments.length === 0) return false
 
   return requiredAssignments.every((assignment) =>

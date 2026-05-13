@@ -10,10 +10,13 @@ export const reportCardStatusSchema = z.enum([
   "BLOCKED_MISSING_EMAIL",
 ])
 
+export const reportCardTypeSchema = z.enum(["ESPANOL", "INGLES"])
+
 export const reportCardSchema = z.object({
   id: idSchema,
   studentId: idSchema,
   periodId: idSchema,
+  type: reportCardTypeSchema,
   status: reportCardStatusSchema,
   directorObservation: z.string().optional(),
   pdfUrl: z.string().url().optional(),

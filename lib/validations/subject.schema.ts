@@ -4,6 +4,7 @@ import { idSchema } from "./common"
 export const subjectSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
+  type: z.enum(["ESPANOL", "INGLES"]),
   gradeRange: z.array(z.string().min(1)).min(1),
   active: z.boolean(),
 })

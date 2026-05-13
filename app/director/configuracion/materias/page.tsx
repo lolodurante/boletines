@@ -12,6 +12,13 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Textarea } from "@/components/ui/textarea"
 import { Switch } from "@/components/ui/switch"
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import {
   AlertDialog,
   AlertDialogAction,
   AlertDialogCancel,
@@ -49,6 +56,7 @@ interface GradeCriteria {
 interface Subject {
   id: string
   name: string
+  reportType: "ESPANOL" | "INGLES"
   appliesTo: string[]
   criteriaByGrade: GradeCriteria[]
 }
@@ -63,6 +71,10 @@ function getGradeLabel(appliesTo: string[]): string {
   const last = GRADES.indexOf(sorted[sorted.length - 1]!)
   if (last - first + 1 === sorted.length) return `${sorted[0]} – ${sorted[sorted.length - 1]}`
   return `${appliesTo.length} grados`
+}
+
+function getReportTypeLabel(reportType: Subject["reportType"]) {
+  return reportType === "INGLES" ? "Inglés" : "Español"
 }
 
 function CriterionRow({
@@ -129,10 +141,12 @@ export default function MateriasPage() {
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
 
   const handleAddSubject = () => {
-    if (!newSubjectName.trim()) return
+    const subjectName = newSubjectName.trim()
+    if (!subjectName) return
     const newSubject: Subject = {
       id: `s${Date.now()}`,
-      name: newSubjectName,
+      name: subjectName,
+      reportType: "ESPANOL",
       appliesTo: [...GRADES],
       criteriaByGrade: GRADES.map((grade) => ({ grade, criteria: [] })),
     }
@@ -175,6 +189,12 @@ export default function MateriasPage() {
     setHasChanges(true)
   }
 
+  const handleUpdateSubjectReportType = (reportType: Subject["reportType"]) => {
+    if (!selectedSubject) return
+    setSubjects((prev) => prev.map((s) => (s.id === selectedSubject.id ? { ...s, reportType } : s)))
+    setHasChanges(true)
+  }
+
   const toggleGrade = (grade: string) => {
     if (!selectedSubject) return
     const isActive = selectedSubject.appliesTo.includes(grade)
@@ -204,10 +224,11 @@ export default function MateriasPage() {
   }
 
   const handleAddCriterionForGrade = (grade: string) => {
-    if (!newCriterionName.trim() || !selectedSubject) return
+    const criterionName = newCriterionName.trim()
+    if (!criterionName || !selectedSubject) return
     const newCriterion: Criterion = {
       id: `c${Date.now()}`,
-      name: newCriterionName,
+      name: criterionName,
       description: "",
     }
     setSubjects((prev) =>
@@ -338,6 +359,9 @@ export default function MateriasPage() {
                   >
                     <span className="font-medium text-sm truncate">{subject.name}</span>
                     <div className="flex items-center gap-1.5 shrink-0 ml-2">
+                      <Badge variant="outline" className="text-xs font-normal">
+                        {getReportTypeLabel(subject.reportType)}
+                      </Badge>
                       <Badge variant="secondary" className="text-xs font-normal">
                         {getGradeLabel(subject.appliesTo)}
                       </Badge>
@@ -421,6 +445,18 @@ export default function MateriasPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
+                <div className="mt-3 grid gap-2 sm:max-w-xs">
+                  <label className="text-xs font-medium text-muted-foreground">Boletín</label>
+                  <Select value={selectedSubject.reportType} onValueChange={handleUpdateSubjectReportType}>
+                    <SelectTrigger className="h-9">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="ESPANOL">Español</SelectItem>
+                      <SelectItem value="INGLES">Inglés</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
               </CardHeader>
 
               <CardContent className="flex-1 overflow-auto p-0">
@@ -438,28 +474,18 @@ export default function MateriasPage() {
                       <TabsList className="w-max justify-start h-auto bg-transparent p-0 gap-0.5 flex-nowrap">
                         {GRADES.map((grade) => {
                           const isActive = selectedSubject.appliesTo.includes(grade)
-                          const count =
-                            selectedSubject.criteriaByGrade.find((gc) => gc.grade === grade)
-                              ?.criteria.length ?? 0
                           return (
                             <TabsTrigger
                               key={grade}
                               value={grade}
                               className={cn(
-                                "px-3 py-2 text-sm shrink-0 rounded-none border-b-2 border-transparent",
-                                "data-[state=active]:bg-transparent data-[state=active]:border-accent data-[state=active]:text-accent-foreground",
+                                "min-w-12 px-4 py-2 text-sm font-medium shrink-0 rounded-none border-b-2 border-transparent text-foreground",
+                                "data-[state=active]:bg-transparent data-[state=active]:border-accent data-[state=active]:text-foreground",
                                 "transition-colors",
                                 !isActive && "opacity-40",
                               )}
                             >
                               {grade}
-                              {isActive ? (
-                                <Badge variant="secondary" className="ml-1.5 text-xs px-1.5 h-4">
-                                  {count}
-                                </Badge>
-                              ) : (
-                                <span className="ml-1 text-xs text-muted-foreground">–</span>
-                              )}
                             </TabsTrigger>
                           )
                         })}

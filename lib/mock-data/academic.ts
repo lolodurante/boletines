@@ -32,8 +32,9 @@ export const mockStudents: Student[] = [
 ]
 
 export const mockSubjects: Subject[] = [
-  { id: "subject-lengua", name: "Lengua", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
-  { id: "subject-matematica", name: "Matematica", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-lengua", name: "Lengua", type: "ESPANOL", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-matematica", name: "Matematica", type: "ESPANOL", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-ingles", name: "Ingles", type: "INGLES", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
 ]
 
 export const mockCriteria: EvaluationCriterion[] = [
@@ -74,12 +75,14 @@ export const mockPeriods: AcademicPeriod[] = [
 export const mockAssignments: CourseAssignment[] = [
   { id: "assignment-1", teacherId: "teacher-1", subjectId: "subject-matematica", grade: "3", division: "A", periodId: "period-2026-t1" },
   { id: "assignment-2", teacherId: "teacher-2", subjectId: "subject-lengua", grade: "3", division: "A", periodId: "period-2026-t1" },
+  { id: "assignment-3", teacherId: "teacher-2", subjectId: "subject-ingles", grade: "3", division: "A", periodId: "period-2026-t1" },
 ]
 
 export const mockEvaluations: Evaluation[] = [
   { id: "evaluation-1", studentId: "student-1", teacherId: "teacher-1", subjectId: "subject-matematica", periodId: "period-2026-t1", status: "SUBMITTED", submittedAt: now, generalObservation: "Buen progreso." },
   { id: "evaluation-2", studentId: "student-1", teacherId: "teacher-2", subjectId: "subject-lengua", periodId: "period-2026-t1", status: "SUBMITTED", submittedAt: now },
   { id: "evaluation-3", studentId: "student-2", teacherId: "teacher-1", subjectId: "subject-matematica", periodId: "period-2026-t1", status: "SUBMITTED", submittedAt: now },
+  { id: "evaluation-4", studentId: "student-1", teacherId: "teacher-2", subjectId: "subject-ingles", periodId: "period-2026-t1", status: "DRAFT", submittedAt: now },
 ]
 
 export const mockEvaluationGrades: EvaluationGrade[] = [
@@ -89,7 +92,7 @@ export const mockEvaluationGrades: EvaluationGrade[] = [
 ]
 
 export const mockReportCards: ReportCard[] = [
-  { id: "report-1", studentId: "student-1", periodId: "period-2026-t1", status: "READY_FOR_REVIEW", pdfStatus: "PENDING" },
-  { id: "report-2", studentId: "student-2", periodId: "period-2026-t1", status: "BLOCKED_MISSING_EMAIL", pdfStatus: "SKIPPED" },
-  { id: "report-3", studentId: "student-3", periodId: "period-2026-t1", status: "NOT_READY", pdfStatus: "PENDING" },
+  { id: "report-1", studentId: "student-1", periodId: "period-2026-t1", type: "ESPANOL", status: "READY_FOR_REVIEW", pdfStatus: "PENDING" },
+  { id: "report-2", studentId: "student-2", periodId: "period-2026-t1", type: "ESPANOL", status: "BLOCKED_MISSING_EMAIL", pdfStatus: "SKIPPED" },
+  { id: "report-3", studentId: "student-3", periodId: "period-2026-t1", type: "ESPANOL", status: "NOT_READY", pdfStatus: "PENDING" },
 ]

@@ -8,6 +8,7 @@ const DEFAULT_STUDENT_LIMIT_PER_COURSE = 12
 const subjects = [
   {
     name: "Practicas del Lenguaje",
+    type: "ESPANOL",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: [
       "Comprension lectora",
@@ -18,26 +19,31 @@ const subjects = [
   },
   {
     name: "Matematica",
+    type: "ESPANOL",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: ["Resolucion de problemas", "Calculo mental", "Geometria y medida", "Argumentacion"],
   },
   {
     name: "Ciencias Sociales",
+    type: "ESPANOL",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: ["Comprension de procesos", "Uso de fuentes", "Trabajo en clase"],
   },
   {
     name: "Ciencias Naturales",
+    type: "ESPANOL",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: ["Observacion y registro", "Explicacion de fenomenos", "Trabajo experimental"],
   },
   {
     name: "Ingles",
+    type: "INGLES",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: ["Comprension", "Produccion oral", "Produccion escrita"],
   },
   {
     name: "Educacion Artistica",
+    type: "ESPANOL",
     gradeRange: ["1", "2", "3", "4", "5", "6"],
     criteria: ["Exploracion de materiales", "Proceso creativo", "Presentacion de trabajos"],
   },
@@ -151,8 +157,8 @@ async function upsertSubjectsAndCriteria(prisma) {
   for (const subjectInput of subjects) {
     const subject = await prisma.subject.upsert({
       where: { name: subjectInput.name },
-      create: { name: subjectInput.name, gradeRange: subjectInput.gradeRange, active: true },
-      update: { gradeRange: subjectInput.gradeRange, active: true },
+      create: { name: subjectInput.name, type: subjectInput.type, gradeRange: subjectInput.gradeRange, active: true },
+      update: { type: subjectInput.type, gradeRange: subjectInput.gradeRange, active: true },
     })
 
     const criteria = []
@@ -331,20 +337,23 @@ async function main() {
       }
 
       for (const student of courseStudents) {
-        await prisma.reportCard.upsert({
-          where: { studentId_periodId: { studentId: student.id, periodId: period.id } },
-          create: {
-            studentId: student.id,
-            periodId: period.id,
-            status: "READY_FOR_REVIEW",
-            pdfStatus: "PENDING",
-          },
-          update: {
-            status: "READY_FOR_REVIEW",
-            pdfStatus: "PENDING",
-          },
-        })
-        reportCards += 1
+        for (const type of new Set(subjectRecords.map((record) => record.subject.type))) {
+          await prisma.reportCard.upsert({
+            where: { studentId_periodId_type: { studentId: student.id, periodId: period.id, type } },
+            create: {
+              studentId: student.id,
+              periodId: period.id,
+              type,
+              status: "READY_FOR_REVIEW",
+              pdfStatus: "PENDING",
+            },
+            update: {
+              status: "READY_FOR_REVIEW",
+              pdfStatus: "PENDING",
+            },
+          })
+          reportCards += 1
+        }
       }
     }
 

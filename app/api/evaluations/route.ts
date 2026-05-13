@@ -245,7 +245,7 @@ export async function POST(request: Request) {
             periodId: input.periodId,
             subject: { active: true },
           },
-          select: { teacherId: true, subjectId: true },
+          select: { teacherId: true, subjectId: true, subject: { select: { type: true } } },
         })
 
         if (allAssignments.length === 0) return
@@ -259,33 +259,38 @@ export async function POST(request: Request) {
           select: { studentId: true, teacherId: true, subjectId: true },
         })
 
-        const completeStudentIds = Array.from(validStudentIds).filter((studentId) =>
-          allAssignments.every((assignment) =>
-            submittedEvals.some(
-              (e) =>
-                e.studentId === studentId &&
-                e.teacherId === assignment.teacherId &&
-                e.subjectId === assignment.subjectId,
+        const reportTypes = Array.from(new Set(allAssignments.map((assignment) => assignment.subject.type)))
+        for (const reportType of reportTypes) {
+          const requiredAssignments = allAssignments.filter((assignment) => assignment.subject.type === reportType)
+          const completeStudentIds = Array.from(validStudentIds).filter((studentId) =>
+            requiredAssignments.every((assignment) =>
+              submittedEvals.some(
+                (e) =>
+                  e.studentId === studentId &&
+                  e.teacherId === assignment.teacherId &&
+                  e.subjectId === assignment.subjectId,
+              ),
             ),
-          ),
-        )
+          )
 
-        for (const studentId of completeStudentIds) {
-          const updated = await tx.reportCard.updateMany({
-            where: {
-              studentId,
-              periodId: input.periodId,
-              status: { in: ["NOT_READY", "NEEDS_REVISION"] },
-            },
-            data: { status: "READY_FOR_REVIEW" },
-          })
-          if (updated.count === 0) {
-            try {
-              await tx.reportCard.create({
-                data: { studentId, periodId: input.periodId, status: "READY_FOR_REVIEW" },
-              })
-            } catch {
-              // ReportCard already exists in a later state (READY_FOR_REVIEW/APPROVED/SENT), leave it.
+          for (const studentId of completeStudentIds) {
+            const updated = await tx.reportCard.updateMany({
+              where: {
+                studentId,
+                periodId: input.periodId,
+                type: reportType,
+                status: { in: ["NOT_READY", "NEEDS_REVISION"] },
+              },
+              data: { status: "READY_FOR_REVIEW" },
+            })
+            if (updated.count === 0) {
+              try {
+                await tx.reportCard.create({
+                  data: { studentId, periodId: input.periodId, type: reportType, status: "READY_FOR_REVIEW" },
+                })
+              } catch {
+                // ReportCard already exists in a later state (READY_FOR_REVIEW/APPROVED/SENT), leave it.
+              }
             }
           }
         }
