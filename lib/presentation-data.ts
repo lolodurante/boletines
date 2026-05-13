@@ -55,6 +55,8 @@ export interface DirectorReportCardData {
     teacherName: string
     criteria: Array<{ name: string; grade: GradeLevel }>
     observation?: string
+    specialValue?: string
+    numericGrade?: number
   }>
 }
 
@@ -139,6 +141,9 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
         evaluation.periodId === reportCard.periodId &&
         getSubjectById(evaluation.subjectId)?.reportType === reportCard.reportType,
     )
+    const printableEvaluations = relatedEvaluations.filter(
+      (evaluation) => getSubjectById(evaluation.subjectId)?.entryKind !== "TEACHER_OBSERVATION",
+    )
 
     return {
       id: reportCard.id,
@@ -153,13 +158,15 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
       status: reportCard.status,
       parentEmail: student?.parentEmail ?? null,
       pdfUrl: reportCard.pdfUrl,
-      grades: relatedEvaluations.map((evaluation) => ({
+      grades: printableEvaluations.map((evaluation) => ({
         subjectName: getSubjectById(evaluation.subjectId)?.name ?? "—",
         teacherId: evaluation.teacherId,
         teacherName: getTeacherById(evaluation.teacherId)?.name ?? "—",
-        criteria: Object.entries(evaluation.grades).map(([name, grade]) => ({ name, grade })),
-        observation: evaluation.observation,
-      })),
+          criteria: Object.entries(evaluation.grades).map(([name, grade]) => ({ name, grade })),
+          observation: evaluation.observation,
+          specialValue: evaluation.specialValue,
+          numericGrade: evaluation.numericGrade,
+        })),
     }
   })
 }

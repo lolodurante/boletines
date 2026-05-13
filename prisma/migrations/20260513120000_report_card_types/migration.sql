@@ -16,8 +16,9 @@ CREATE INDEX "subjects_type_idx" ON "subjects"("type");
 CREATE INDEX "report_cards_type_idx" ON "report_cards"("type");
 CREATE UNIQUE INDEX "report_cards_student_id_period_id_type_key" ON "report_cards"("student_id", "period_id", "type");
 
-INSERT INTO "report_cards" ("student_id", "period_id", "type", "status", "pdf_status", "created_at", "updated_at")
+INSERT INTO "report_cards" ("id", "student_id", "period_id", "type", "status", "pdf_status", "created_at", "updated_at")
 SELECT
+  gen_random_uuid(),
   s."id",
   ca."period_id",
   'INGLES'::"ReportCardType",

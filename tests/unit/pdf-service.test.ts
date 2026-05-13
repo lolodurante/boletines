@@ -172,7 +172,8 @@ describe("generateReportCardPdf", () => {
 
     expect(pageCount).toBe(2)
     expect(pdf).toContain("/MediaBox [0 0 595 842]")
-    expect(pdf.match(/COLEGIO LABARDÉN - BOLETÍN DEMO DIRECCION 2026/g)).toHaveLength(2)
+    expect(pdf).toContain("COLEGIO LABARDÉN")
+    expect(pdf).toContain("DEMO DIRECCION 2026")
     expect(pdf.match(/Indicadores de logro en las áreas/g)).toHaveLength(2)
     expect(pdf).toContain("NOMBRE DEL ALUMNO: Inaki Casanova")
     expect(pdf).toContain("CURSO: 6 B")
@@ -182,5 +183,63 @@ describe("generateReportCardPdf", () => {
     expect(pdf).not.toContain("Observación docente")
     expect(pdf).toContain("Observación: Continua acompanamiento desde direccion.")
     expect(pdf).not.toContain("Observación dirección")
+  })
+
+  it("places absences above the achievement grid and comments at the bottom", async () => {
+    const result = await generateReportCardPdf({
+      student: { fullName: "Zoe Federico", grade: "6", division: "B" },
+      period: { name: "Demo Direccion 2026" },
+      subjects: [
+        {
+          subjectName: "Ingles",
+          teacherName: "Daniela Cuper",
+          criteria: [{ name: "Comprension oral", gradeLabel: "AVANZADO" }],
+        },
+      ],
+      absences: [{ label: "Inasistencias", value: "2" }],
+      comments: [{ label: "Comentario", value: "Participa con entusiasmo." }],
+      branding: { primaryColor: "#2563eb", secondaryColor: "#64748b" },
+    })
+
+    const pdf = result.buffer.toString("latin1")
+    const absencesIndex = pdf.indexOf("Inasistencias: 2")
+    const gridIndex = pdf.indexOf("Indicadores de logro en las áreas")
+    const subjectIndex = pdf.indexOf("INGLES")
+    const commentIndex = pdf.indexOf("Comentario: Participa con entusiasmo.")
+
+    expect(absencesIndex).toBeGreaterThan(-1)
+    expect(gridIndex).toBeGreaterThan(-1)
+    expect(subjectIndex).toBeGreaterThan(-1)
+    expect(commentIndex).toBeGreaterThan(-1)
+    expect(absencesIndex).toBeLessThan(gridIndex)
+    expect(commentIndex).toBeGreaterThan(subjectIndex)
+  })
+
+  it("renders numeric grade after a subject criteria grid", async () => {
+    const result = await generateReportCardPdf({
+      student: { fullName: "Pilar Carera", grade: "4", division: "B" },
+      period: { name: "Demo Direccion 2026" },
+      subjects: [
+        {
+          subjectName: "Matematica",
+          teacherName: "Laura Fernandez",
+          numericGrade: 7,
+          criteria: [
+            { name: "Resolucion de problemas", gradeLabel: "AVANZADO" },
+            { name: "Calculo", gradeLabel: "ALCANZADO" },
+          ],
+        },
+      ],
+      branding: { primaryColor: "#2563eb", secondaryColor: "#64748b" },
+    })
+
+    const pdf = result.buffer.toString("latin1")
+    const subjectIndex = pdf.indexOf("MATEMATICA")
+    const criterionIndex = pdf.indexOf("Calculo")
+    const noteIndex = pdf.indexOf("Nota: 7")
+
+    expect(subjectIndex).toBeGreaterThan(-1)
+    expect(criterionIndex).toBeGreaterThan(subjectIndex)
+    expect(noteIndex).toBeGreaterThan(criterionIndex)
   })
 })

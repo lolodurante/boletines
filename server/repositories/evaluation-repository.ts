@@ -38,6 +38,6 @@ export async function findEvaluationsForReportCard(input: { studentId: string; p
       },
       subject: true,
     },
-    orderBy: [{ subject: { name: "asc" } }],
+    orderBy: [{ subject: { order: "asc" } }],
   })
 }

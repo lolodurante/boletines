@@ -23,7 +23,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       prisma.subject.findMany({
         where: { active: true },
         include: { criteria: { where: { active: true } } },
-        orderBy: { name: "asc" },
+        orderBy: { order: "asc" },
       }),
       prisma.academicPeriod.findMany({ orderBy: { startDate: "asc" } }),
       prisma.courseAssignment.findMany({ orderBy: [{ grade: "asc" }, { division: "asc" }] }),
@@ -85,6 +85,8 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       id: subject.id,
       name: subject.name,
       reportType: subject.type,
+      entryKind: subject.entryKind,
+      hasNumericGrade: subject.hasNumericGrade,
       appliesTo: subject.gradeRange.map((grade) => `${grade}°`),
       criteriaByGrade: subject.gradeRange.map((grade) => ({
         grade: `${grade}°`,
@@ -145,7 +147,8 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         evaluation.grades.map((grade) => [grade.criterion.name, grade.scaleLevel.label as GradeLevel]),
       ),
       observation: evaluation.generalObservation ?? undefined,
-      studentObservation: evaluation.grades.find((grade) => grade.observation)?.observation ?? undefined,
+      specialValue: evaluation.specialValue ?? undefined,
+      numericGrade: evaluation.numericGrade ?? undefined,
     }))
     const directorEvaluationRows: PlatformData["directorEvaluationRows"] = mappedEvaluations.map((evaluation) => ({
       id: evaluation.id,
@@ -170,6 +173,10 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
           evaluation.periodId === reportCard.periodId &&
           mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.reportType === reportCard.reportType,
       )
+      const printableEvaluations = relatedEvaluations.filter(
+        (evaluation) =>
+          mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.entryKind !== "TEACHER_OBSERVATION",
+      )
 
       return {
         id: reportCard.id,
@@ -185,12 +192,14 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         parentEmail: student?.parentEmail ?? null,
         directorObservation: reportCard.directorObservation ?? undefined,
         pdfUrl: reportCard.pdfUrl,
-        grades: relatedEvaluations.map((evaluation) => ({
+        grades: printableEvaluations.map((evaluation) => ({
           subjectName: mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.name ?? "—",
           teacherId: evaluation.teacherId,
           teacherName: mappedTeachers.find((teacher) => teacher.id === evaluation.teacherId)?.name ?? "—",
           criteria: Object.entries(evaluation.grades).map(([name, grade]) => ({ name, grade })),
           observation: evaluation.observation,
+          specialValue: evaluation.specialValue,
+          numericGrade: evaluation.numericGrade,
         })),
       }
     })

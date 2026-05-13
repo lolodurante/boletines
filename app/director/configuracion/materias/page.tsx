@@ -3,7 +3,6 @@
 import { useEffect, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Input } from "@/components/ui/input"
 import { PageHeader } from "@/components/page-header"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -29,15 +28,7 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog"
-import {
-  Plus,
-  Trash2,
-  GripVertical,
-  Save,
-  ChevronLeft,
-  ChevronRight,
-  Pencil,
-} from "lucide-react"
+import { Plus, Trash2, Save, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import { usePlatformData } from "@/lib/use-platform-data"
@@ -57,24 +48,42 @@ interface Subject {
   id: string
   name: string
   reportType: "ESPANOL" | "INGLES"
+  entryKind?: "ACADEMIC" | "TEACHER_OBSERVATION" | "ABSENCES"
+  hasNumericGrade?: boolean
   appliesTo: string[]
   criteriaByGrade: GradeCriteria[]
+  sharedCriteria?: boolean
 }
 
 const GRADES = ["1°", "2°", "3°", "4°", "5°", "6°"]
 
-function getGradeLabel(appliesTo: string[]): string {
-  if (appliesTo.length === 0) return "Sin grados"
-  if (appliesTo.length === 1) return appliesTo[0]!
-  const sorted = [...appliesTo].sort((a, b) => GRADES.indexOf(a) - GRADES.indexOf(b))
-  const first = GRADES.indexOf(sorted[0]!)
-  const last = GRADES.indexOf(sorted[sorted.length - 1]!)
-  if (last - first + 1 === sorted.length) return `${sorted[0]} – ${sorted[sorted.length - 1]}`
-  return `${appliesTo.length} grados`
+function detectSharedCriteria(subject: Subject): boolean {
+  const active = subject.criteriaByGrade.filter((gc) => subject.appliesTo.includes(gc.grade))
+  if (active.length <= 1) return true
+  const first = active[0]!.criteria
+  return active.every(
+    (gc) =>
+      gc.criteria.length === first.length &&
+      gc.criteria.every((c, i) => c.name === first[i]?.name && c.description === first[i]?.description),
+  )
+}
+
+function getSharedCriteria(subject: Subject): Criterion[] {
+  return subject.criteriaByGrade.find((gc) => subject.appliesTo.includes(gc.grade))?.criteria ?? []
+}
+
+function spreadToAllGrades(subject: Subject, criteria: Criterion[]): GradeCriteria[] {
+  return subject.criteriaByGrade.map((gc) => ({ ...gc, criteria }))
 }
 
 function getReportTypeLabel(reportType: Subject["reportType"]) {
   return reportType === "INGLES" ? "Inglés" : "Español"
+}
+
+function getEntryKindLabel(entryKind: NonNullable<Subject["entryKind"]>) {
+  if (entryKind === "TEACHER_OBSERVATION") return "Obs. docente"
+  if (entryKind === "ABSENCES") return "Inasistencias"
+  return "Materia"
 }
 
 function CriterionRow({
@@ -90,7 +99,6 @@ function CriterionRow({
 }) {
   return (
     <div className="flex gap-2.5 p-3 border rounded-lg group bg-card transition-colors hover:bg-muted/20">
-      <GripVertical className="size-4 text-muted-foreground/30 cursor-grab shrink-0 mt-2 hidden sm:block" />
       <div className="flex-1 min-w-0 space-y-1.5">
         <Input
           value={criterion.name}
@@ -118,6 +126,62 @@ function CriterionRow({
   )
 }
 
+function CriteriaList({
+  criteria,
+  newCriterionName,
+  onNewCriterionNameChange,
+  onAdd,
+  onUpdateName,
+  onUpdateDescription,
+  onRemove,
+  gradePlaceholder,
+}: {
+  criteria: Criterion[]
+  newCriterionName: string
+  onNewCriterionNameChange: (v: string) => void
+  onAdd: () => void
+  onUpdateName: (id: string, v: string) => void
+  onUpdateDescription: (id: string, v: string) => void
+  onRemove: (id: string) => void
+  gradePlaceholder?: string
+}) {
+  return (
+    <div className="space-y-3">
+      <div className="flex gap-2">
+        <Input
+          placeholder={gradePlaceholder ?? "Agregar criterio..."}
+          value={newCriterionName}
+          onChange={(e) => onNewCriterionNameChange(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && onAdd()}
+          className="flex-1 text-sm"
+        />
+        <Button onClick={onAdd} disabled={!newCriterionName.trim()} size="sm">
+          <Plus className="size-4 mr-1.5" />
+          Agregar
+        </Button>
+      </div>
+      {criteria.length > 0 ? (
+        <div className="space-y-2">
+          {criteria.map((c) => (
+            <CriterionRow
+              key={c.id}
+              criterion={c}
+              onUpdateName={(v) => onUpdateName(c.id, v)}
+              onUpdateDescription={(v) => onUpdateDescription(c.id, v)}
+              onRemove={() => onRemove(c.id)}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-8 text-muted-foreground">
+          <p className="text-sm">Sin criterios todavía</p>
+          <p className="text-xs mt-1">Usá el campo de arriba para agregar el primero</p>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export default function MateriasPage() {
   const { data, reload } = usePlatformData()
   const [subjects, setSubjects] = useState<Subject[]>([])
@@ -131,7 +195,10 @@ export default function MateriasPage() {
 
   useEffect(() => {
     if (hasChanges) return
-    const nextSubjects = data.subjects
+    const nextSubjects = (data.subjects as Subject[]).map((s) => ({
+      ...s,
+      sharedCriteria: s.sharedCriteria ?? detectSharedCriteria(s),
+    }))
     setSubjects(nextSubjects)
     if (!selectedSubjectId || !nextSubjects.some((s) => s.id === selectedSubjectId)) {
       setSelectedSubjectId(nextSubjects[0]?.id)
@@ -139,16 +206,23 @@ export default function MateriasPage() {
   }, [data.subjects, hasChanges, selectedSubjectId])
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
+  const isShared = selectedSubject?.sharedCriteria !== false
+  const sharedCriteria = selectedSubject ? getSharedCriteria(selectedSubject) : []
+
+  // ── subject list actions ──────────────────────────────────────────────────
 
   const handleAddSubject = () => {
-    const subjectName = newSubjectName.trim()
-    if (!subjectName) return
+    const name = newSubjectName.trim()
+    if (!name) return
     const newSubject: Subject = {
       id: `s${Date.now()}`,
-      name: subjectName,
+      name,
       reportType: "ESPANOL",
+      entryKind: "ACADEMIC",
+      hasNumericGrade: false,
       appliesTo: [...GRADES],
       criteriaByGrade: GRADES.map((grade) => ({ grade, criteria: [] })),
+      sharedCriteria: true,
     }
     setSubjects((prev) => [...prev, newSubject])
     setSelectedSubjectId(newSubject.id)
@@ -161,7 +235,9 @@ export default function MateriasPage() {
   const handleDeleteSubject = async () => {
     if (!selectedSubject) return
     const subjectName = selectedSubject.name
-    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(selectedSubject.id)
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+      selectedSubject.id,
+    )
 
     if (isUuid) {
       const response = await fetch(`/api/subjects?id=${encodeURIComponent(selectedSubject.id)}`, {
@@ -183,16 +259,25 @@ export default function MateriasPage() {
     toast.success(`"${subjectName}" eliminada`)
   }
 
-  const handleUpdateSubjectName = (name: string) => {
+  // ── field updates ─────────────────────────────────────────────────────────
+
+  const updateSubject = (patch: Partial<Subject>) => {
     if (!selectedSubject) return
-    setSubjects((prev) => prev.map((s) => (s.id === selectedSubject.id ? { ...s, name } : s)))
+    setSubjects((prev) => prev.map((s) => (s.id === selectedSubject.id ? { ...s, ...patch } : s)))
     setHasChanges(true)
   }
 
-  const handleUpdateSubjectReportType = (reportType: Subject["reportType"]) => {
+  const handleUpdateEntryKind = (entryKind: NonNullable<Subject["entryKind"]>) => {
     if (!selectedSubject) return
-    setSubjects((prev) => prev.map((s) => (s.id === selectedSubject.id ? { ...s, reportType } : s)))
-    setHasChanges(true)
+    updateSubject({
+      entryKind,
+      reportType: entryKind === "ABSENCES" ? "INGLES" : selectedSubject.reportType,
+      hasNumericGrade: entryKind === "ACADEMIC" ? selectedSubject.hasNumericGrade : false,
+      criteriaByGrade:
+        entryKind === "ACADEMIC"
+          ? selectedSubject.criteriaByGrade
+          : selectedSubject.criteriaByGrade.map((gc) => ({ ...gc, criteria: [] })),
+    })
   }
 
   const toggleGrade = (grade: string) => {
@@ -207,10 +292,19 @@ export default function MateriasPage() {
       : [...selectedSubject.appliesTo, grade].sort((a, b) => GRADES.indexOf(a) - GRADES.indexOf(b))
 
     let newCriteriaByGrade = selectedSubject.criteriaByGrade
-    if (!isActive && !selectedSubject.criteriaByGrade.find((gc) => gc.grade === grade)) {
-      newCriteriaByGrade = [...selectedSubject.criteriaByGrade, { grade, criteria: [] }].sort(
-        (a, b) => GRADES.indexOf(a.grade) - GRADES.indexOf(b.grade),
-      )
+    if (!isActive) {
+      const criteriaForNewGrade = isShared ? getSharedCriteria(selectedSubject) : []
+      const existing = selectedSubject.criteriaByGrade.find((gc) => gc.grade === grade)
+      if (!existing) {
+        newCriteriaByGrade = [
+          ...selectedSubject.criteriaByGrade,
+          { grade, criteria: criteriaForNewGrade },
+        ].sort((a, b) => GRADES.indexOf(a.grade) - GRADES.indexOf(b.grade))
+      } else if (isShared) {
+        newCriteriaByGrade = selectedSubject.criteriaByGrade.map((gc) =>
+          gc.grade === grade ? { ...gc, criteria: criteriaForNewGrade } : gc,
+        )
+      }
     }
 
     setSubjects((prev) =>
@@ -223,14 +317,59 @@ export default function MateriasPage() {
     setHasChanges(true)
   }
 
+  // ── shared criteria actions ───────────────────────────────────────────────
+
+  const handleAddSharedCriterion = () => {
+    const name = newCriterionName.trim()
+    if (!name || !selectedSubject) return
+    const newCriterion: Criterion = { id: `c${Date.now()}`, name, description: "" }
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === selectedSubject.id
+          ? { ...s, criteriaByGrade: s.criteriaByGrade.map((gc) => ({ ...gc, criteria: [...gc.criteria, newCriterion] })) }
+          : s,
+      ),
+    )
+    setNewCriterionName("")
+    setHasChanges(true)
+  }
+
+  const handleRemoveSharedCriterion = (id: string) => {
+    if (!selectedSubject) return
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === selectedSubject.id
+          ? { ...s, criteriaByGrade: s.criteriaByGrade.map((gc) => ({ ...gc, criteria: gc.criteria.filter((c) => c.id !== id) })) }
+          : s,
+      ),
+    )
+    setHasChanges(true)
+  }
+
+  const handleUpdateSharedCriterion = (id: string, field: "name" | "description", value: string) => {
+    if (!selectedSubject) return
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === selectedSubject.id
+          ? {
+              ...s,
+              criteriaByGrade: s.criteriaByGrade.map((gc) => ({
+                ...gc,
+                criteria: gc.criteria.map((c) => (c.id === id ? { ...c, [field]: value } : c)),
+              })),
+            }
+          : s,
+      ),
+    )
+    setHasChanges(true)
+  }
+
+  // ── per-grade criteria actions ────────────────────────────────────────────
+
   const handleAddCriterionForGrade = (grade: string) => {
-    const criterionName = newCriterionName.trim()
-    if (!criterionName || !selectedSubject) return
-    const newCriterion: Criterion = {
-      id: `c${Date.now()}`,
-      name: criterionName,
-      description: "",
-    }
+    const name = newCriterionName.trim()
+    if (!name || !selectedSubject) return
+    const newCriterion: Criterion = { id: `c${Date.now()}`, name, description: "" }
     setSubjects((prev) =>
       prev.map((s) =>
         s.id === selectedSubject.id
@@ -247,7 +386,24 @@ export default function MateriasPage() {
     setHasChanges(true)
   }
 
-  const handleRemoveCriterionFromGrade = (grade: string, criterionId: string) => {
+  const handleRemoveCriterionFromGrade = (grade: string, id: string) => {
+    if (!selectedSubject) return
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === selectedSubject.id
+          ? {
+              ...s,
+              criteriaByGrade: s.criteriaByGrade.map((gc) =>
+                gc.grade === grade ? { ...gc, criteria: gc.criteria.filter((c) => c.id !== id) } : gc,
+              ),
+            }
+          : s,
+      ),
+    )
+    setHasChanges(true)
+  }
+
+  const handleUpdateCriterionInGrade = (grade: string, id: string, field: "name" | "description", value: string) => {
     if (!selectedSubject) return
     setSubjects((prev) =>
       prev.map((s) =>
@@ -256,7 +412,7 @@ export default function MateriasPage() {
               ...s,
               criteriaByGrade: s.criteriaByGrade.map((gc) =>
                 gc.grade === grade
-                  ? { ...gc, criteria: gc.criteria.filter((c) => c.id !== criterionId) }
+                  ? { ...gc, criteria: gc.criteria.map((c) => (c.id === id ? { ...c, [field]: value } : c)) }
                   : gc,
               ),
             }
@@ -266,34 +422,38 @@ export default function MateriasPage() {
     setHasChanges(true)
   }
 
-  const handleUpdateCriterionInGrade = (
-    grade: string,
-    criterionId: string,
-    field: "name" | "description",
-    value: string,
-  ) => {
+  // ── shared ↔ per-grade toggle ─────────────────────────────────────────────
+
+  const handleExpandToPerGrade = () => {
     if (!selectedSubject) return
+    // Copy current shared criteria to each active grade before expanding
+    const current = getSharedCriteria(selectedSubject)
     setSubjects((prev) =>
       prev.map((s) =>
         s.id === selectedSubject.id
-          ? {
-              ...s,
-              criteriaByGrade: s.criteriaByGrade.map((gc) =>
-                gc.grade === grade
-                  ? {
-                      ...gc,
-                      criteria: gc.criteria.map((c) =>
-                        c.id === criterionId ? { ...c, [field]: value } : c,
-                      ),
-                    }
-                  : gc,
-              ),
-            }
+          ? { ...s, sharedCriteria: false, criteriaByGrade: spreadToAllGrades(s, current) }
+          : s,
+      ),
+    )
+    setSelectedGrade(selectedSubject.appliesTo[0] ?? GRADES[0]!)
+    setHasChanges(true)
+  }
+
+  const handleCollapseToShared = () => {
+    if (!selectedSubject) return
+    // Use first active grade's criteria as the unified set
+    const base = getSharedCriteria(selectedSubject)
+    setSubjects((prev) =>
+      prev.map((s) =>
+        s.id === selectedSubject.id
+          ? { ...s, sharedCriteria: true, criteriaByGrade: spreadToAllGrades(s, base) }
           : s,
       ),
     )
     setHasChanges(true)
   }
+
+  // ── save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
     setIsSaving(true)
@@ -315,11 +475,7 @@ export default function MateriasPage() {
     toast.success("Cambios guardados")
   }
 
-  const handleSelectSubject = (id: string) => {
-    setSelectedSubjectId(id)
-    setShowDetail(true)
-    setNewCriterionName("")
-  }
+  // ── render ────────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col gap-4 md:gap-6">
@@ -349,7 +505,11 @@ export default function MateriasPage() {
                 {subjects.map((subject) => (
                   <button
                     key={subject.id}
-                    onClick={() => handleSelectSubject(subject.id)}
+                    onClick={() => {
+                      setSelectedSubjectId(subject.id)
+                      setShowDetail(true)
+                      setNewCriterionName("")
+                    }}
                     className={cn(
                       "w-full flex items-center justify-between rounded-lg px-3 py-2.5 text-left transition-colors",
                       selectedSubjectId === subject.id
@@ -357,16 +517,14 @@ export default function MateriasPage() {
                         : "hover:bg-muted",
                     )}
                   >
-                    <span className="font-medium text-sm truncate">{subject.name}</span>
-                    <div className="flex items-center gap-1.5 shrink-0 ml-2">
-                      <Badge variant="outline" className="text-xs font-normal">
-                        {getReportTypeLabel(subject.reportType)}
-                      </Badge>
-                      <Badge variant="secondary" className="text-xs font-normal">
-                        {getGradeLabel(subject.appliesTo)}
-                      </Badge>
-                      <ChevronRight className="size-3.5 text-muted-foreground lg:hidden" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium text-sm truncate">{subject.name}</p>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {getEntryKindLabel(subject.entryKind ?? "ACADEMIC")} · {getReportTypeLabel(subject.reportType)}
+                        {subject.appliesTo.length < GRADES.length && ` · ${subject.appliesTo.length} grados`}
+                      </p>
                     </div>
+                    <ChevronRight className="size-3.5 text-muted-foreground lg:hidden shrink-0 ml-2" />
                   </button>
                 ))}
               </div>
@@ -394,7 +552,7 @@ export default function MateriasPage() {
           {selectedSubject ? (
             <>
               <CardHeader className="pb-3 space-y-0">
-                {/* Mobile back button */}
+                {/* Mobile back */}
                 <Button
                   variant="ghost"
                   size="sm"
@@ -405,16 +563,13 @@ export default function MateriasPage() {
                   Materias
                 </Button>
 
+                {/* Name + delete */}
                 <div className="flex items-center justify-between gap-3">
-                  <div className="flex items-center gap-1.5 min-w-0 flex-1 group">
-                    <Input
-                      value={selectedSubject.name}
-                      onChange={(e) => handleUpdateSubjectName(e.target.value)}
-                      className="text-lg font-semibold h-auto border-transparent bg-transparent p-0 focus-visible:ring-1 focus-visible:ring-ring focus-visible:px-2 focus-visible:py-1 transition-all"
-                    />
-                    <Pencil className="size-3.5 text-muted-foreground/40 shrink-0 group-focus-within:text-muted-foreground transition-colors" />
-                  </div>
-
+                  <Input
+                    value={selectedSubject.name}
+                    onChange={(e) => updateSubject({ name: e.target.value })}
+                    className="text-lg font-semibold h-auto border-transparent bg-transparent p-0 focus-visible:ring-1 focus-visible:ring-ring focus-visible:px-2 focus-visible:py-1 transition-all"
+                  />
                   <AlertDialog>
                     <AlertDialogTrigger asChild>
                       <Button
@@ -429,8 +584,7 @@ export default function MateriasPage() {
                       <AlertDialogHeader>
                         <AlertDialogTitle>¿Eliminar &quot;{selectedSubject.name}&quot;?</AlertDialogTitle>
                         <AlertDialogDescription>
-                          Se eliminarán todos sus criterios de evaluación. Esta acción no se puede
-                          deshacer.
+                          Se eliminarán todos sus criterios de evaluación. Esta acción no se puede deshacer.
                         </AlertDialogDescription>
                       </AlertDialogHeader>
                       <AlertDialogFooter>
@@ -445,146 +599,192 @@ export default function MateriasPage() {
                     </AlertDialogContent>
                   </AlertDialog>
                 </div>
-                <div className="mt-3 grid gap-2 sm:max-w-xs">
-                  <label className="text-xs font-medium text-muted-foreground">Boletín</label>
-                  <Select value={selectedSubject.reportType} onValueChange={handleUpdateSubjectReportType}>
-                    <SelectTrigger className="h-9">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="ESPANOL">Español</SelectItem>
-                      <SelectItem value="INGLES">Inglés</SelectItem>
-                    </SelectContent>
-                  </Select>
+
+                {/* Settings row */}
+                <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                  <div className="grid gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Tipo de carga</label>
+                    <Select
+                      value={selectedSubject.entryKind ?? "ACADEMIC"}
+                      onValueChange={handleUpdateEntryKind}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ACADEMIC">Materia</SelectItem>
+                        <SelectItem value="TEACHER_OBSERVATION">Observación docente</SelectItem>
+                        <SelectItem value="ABSENCES">Inasistencias</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                  <div className="grid gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Boletín</label>
+                    <Select
+                      value={selectedSubject.reportType}
+                      onValueChange={(v) => updateSubject({ reportType: v as Subject["reportType"] })}
+                      disabled={(selectedSubject.entryKind ?? "ACADEMIC") === "ABSENCES"}
+                    >
+                      <SelectTrigger className="h-9">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="ESPANOL">Español</SelectItem>
+                        <SelectItem value="INGLES">Inglés</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {(selectedSubject.entryKind ?? "ACADEMIC") === "ACADEMIC" && (
+                    <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 sm:col-span-2">
+                      <div>
+                        <p className="text-sm font-medium">Lleva nota numérica</p>
+                        <p className="text-xs text-muted-foreground">
+                          Agrega una nota de 1 a 10 al final de la grilla.
+                        </p>
+                      </div>
+                      <Switch
+                        checked={Boolean(selectedSubject.hasNumericGrade)}
+                        onCheckedChange={(v) => updateSubject({ hasNumericGrade: v })}
+                      />
+                    </div>
+                  )}
+
+                  {/* Grade chips */}
+                  <div className="sm:col-span-2 grid gap-1.5">
+                    <label className="text-xs font-medium text-muted-foreground">Grados</label>
+                    <div className="flex flex-wrap gap-1.5">
+                      {GRADES.map((grade) => {
+                        const isActive = selectedSubject.appliesTo.includes(grade)
+                        return (
+                          <button
+                            key={grade}
+                            onClick={() => toggleGrade(grade)}
+                            disabled={isActive && selectedSubject.appliesTo.length === 1}
+                            className={cn(
+                              "px-3 py-1 rounded-full text-sm font-medium border transition-colors disabled:opacity-40 disabled:cursor-not-allowed",
+                              isActive
+                                ? "bg-accent/15 border-accent/50 text-foreground"
+                                : "bg-muted/30 border-border/50 text-muted-foreground hover:bg-muted",
+                            )}
+                          >
+                            {grade}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  </div>
                 </div>
               </CardHeader>
 
               <CardContent className="flex-1 overflow-auto p-0">
-                <Tabs
-                  value={selectedGrade}
-                  onValueChange={(grade) => {
-                    setSelectedGrade(grade)
-                    setNewCriterionName("")
-                  }}
-                  className="h-full flex flex-col"
-                >
-                  {/* Grade tabs — all 6 always visible */}
-                  <div className="px-4 md:px-6 border-b">
-                    <ScrollArea className="w-full">
-                      <TabsList className="w-max justify-start h-auto bg-transparent p-0 gap-0.5 flex-nowrap">
-                        {GRADES.map((grade) => {
-                          const isActive = selectedSubject.appliesTo.includes(grade)
-                          return (
+                {(selectedSubject.entryKind ?? "ACADEMIC") !== "ACADEMIC" ? (
+                  <div className="p-4 md:p-6 text-sm text-muted-foreground">
+                    Esta carga no usa criterios ni calificaciones. El docente va a cargar un valor por alumno.
+                  </div>
+                ) : isShared ? (
+                  /* ── Shared criteria view ── */
+                  <div className="p-4 md:p-6 space-y-4">
+                    <CriteriaList
+                      criteria={sharedCriteria}
+                      newCriterionName={newCriterionName}
+                      onNewCriterionNameChange={setNewCriterionName}
+                      onAdd={handleAddSharedCriterion}
+                      onUpdateName={(id, v) => handleUpdateSharedCriterion(id, "name", v)}
+                      onUpdateDescription={(id, v) => handleUpdateSharedCriterion(id, "description", v)}
+                      onRemove={handleRemoveSharedCriterion}
+                    />
+                    <Separator />
+                    <div
+                      className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 cursor-pointer"
+                      onClick={handleExpandToPerGrade}
+                    >
+                      <div>
+                        <p className="text-sm font-medium">Criterios diferentes por grado</p>
+                        <p className="text-xs text-muted-foreground">
+                          Activá esto si cada grado tiene criterios distintos.
+                        </p>
+                      </div>
+                      <Switch checked={false} onCheckedChange={handleExpandToPerGrade} />
+                    </div>
+                  </div>
+                ) : (
+                  /* ── Per-grade criteria view ── */
+                  <Tabs
+                    value={selectedGrade}
+                    onValueChange={(g) => { setSelectedGrade(g); setNewCriterionName("") }}
+                    className="h-full flex flex-col"
+                  >
+                    <div className="px-4 md:px-6 border-b">
+                      <ScrollArea className="w-full">
+                        <TabsList className="w-max justify-start h-auto bg-transparent p-0 gap-0.5 flex-nowrap">
+                          {selectedSubject.appliesTo.map((grade) => (
                             <TabsTrigger
                               key={grade}
                               value={grade}
-                              className={cn(
-                                "min-w-12 px-4 py-2 text-sm font-medium shrink-0 rounded-none border-b-2 border-transparent text-foreground",
-                                "data-[state=active]:bg-transparent data-[state=active]:border-accent data-[state=active]:text-foreground",
-                                "transition-colors",
-                                !isActive && "opacity-40",
-                              )}
+                              className="min-w-12 px-4 py-2 text-sm font-medium shrink-0 rounded-none border-b-2 border-transparent data-[state=active]:bg-transparent data-[state=active]:border-accent transition-colors"
                             >
                               {grade}
                             </TabsTrigger>
-                          )
-                        })}
-                      </TabsList>
-                    </ScrollArea>
-                  </div>
+                          ))}
+                        </TabsList>
+                      </ScrollArea>
+                    </div>
 
-                  {/* Tab content per grade */}
-                  {GRADES.map((grade) => {
-                    const isActive = selectedSubject.appliesTo.includes(grade)
-                    const gradeCriteria =
-                      selectedSubject.criteriaByGrade.find((gc) => gc.grade === grade)?.criteria ??
-                      []
-                    return (
-                      <TabsContent
-                        key={grade}
-                        value={grade}
-                        className="mt-0 flex-1 overflow-auto p-4 md:p-6 space-y-4 data-[state=inactive]:hidden"
-                      >
-                        {/* Toggle: aplica a este grado */}
-                        <div className="flex items-center justify-between p-3 rounded-lg bg-muted/40 border">
-                          <div>
-                            <p className="text-sm font-medium">Aplica a {grade}</p>
-                            <p className="text-xs text-muted-foreground mt-0.5">
-                              {isActive
-                                ? gradeCriteria.length === 0
-                                  ? "Activo — sin criterios definidos todavía"
-                                  : `${gradeCriteria.length} criterio${gradeCriteria.length !== 1 ? "s" : ""} definido${gradeCriteria.length !== 1 ? "s" : ""}`
-                                : "Esta materia no se evalúa en este grado"}
-                            </p>
-                          </div>
-                          <Switch
-                            checked={isActive}
-                            onCheckedChange={() => toggleGrade(grade)}
-                            disabled={isActive && selectedSubject.appliesTo.length === 1}
+                    {selectedSubject.appliesTo.map((grade) => {
+                      const gradeCriteria =
+                        selectedSubject.criteriaByGrade.find((gc) => gc.grade === grade)?.criteria ?? []
+                      return (
+                        <TabsContent
+                          key={grade}
+                          value={grade}
+                          className="mt-0 flex-1 overflow-auto p-4 md:p-6 space-y-4 data-[state=inactive]:hidden"
+                        >
+                          <CriteriaList
+                            criteria={gradeCriteria}
+                            newCriterionName={newCriterionName}
+                            onNewCriterionNameChange={setNewCriterionName}
+                            onAdd={() => handleAddCriterionForGrade(grade)}
+                            onUpdateName={(id, v) => handleUpdateCriterionInGrade(grade, id, "name", v)}
+                            onUpdateDescription={(id, v) => handleUpdateCriterionInGrade(grade, id, "description", v)}
+                            onRemove={(id) => handleRemoveCriterionFromGrade(grade, id)}
+                            gradePlaceholder={`Agregar criterio para ${grade}...`}
                           />
-                        </div>
+                        </TabsContent>
+                      )
+                    })}
 
-                        {isActive && (
-                          <>
-                            {/* Add criterion — at the top */}
-                            <div className="flex gap-2">
-                              <Input
-                                placeholder={`Agregar criterio para ${grade}...`}
-                                value={newCriterionName}
-                                onChange={(e) => setNewCriterionName(e.target.value)}
-                                onKeyDown={(e) =>
-                                  e.key === "Enter" && handleAddCriterionForGrade(grade)
-                                }
-                                className="flex-1 text-sm"
-                              />
-                              <Button
-                                onClick={() => handleAddCriterionForGrade(grade)}
-                                disabled={!newCriterionName.trim()}
-                                size="sm"
-                              >
-                                <Plus className="size-4 mr-1.5" />
-                                Agregar
-                              </Button>
+                    <div className="border-t px-4 md:px-6 py-3">
+                      <AlertDialog>
+                        <AlertDialogTrigger asChild>
+                          <div className="flex items-center justify-between gap-3 rounded-lg border bg-muted/30 px-3 py-2 cursor-pointer">
+                            <div>
+                              <p className="text-sm font-medium">Criterios diferentes por grado</p>
+                              <p className="text-xs text-muted-foreground">
+                                Desactivá esto para usar los mismos criterios en todos los grados.
+                              </p>
                             </div>
-
-                            {/* Criteria list */}
-                            {gradeCriteria.length > 0 ? (
-                              <div className="space-y-2">
-                                {gradeCriteria.map((criterion) => (
-                                  <CriterionRow
-                                    key={criterion.id}
-                                    criterion={criterion}
-                                    onUpdateName={(v) =>
-                                      handleUpdateCriterionInGrade(grade, criterion.id, "name", v)
-                                    }
-                                    onUpdateDescription={(v) =>
-                                      handleUpdateCriterionInGrade(
-                                        grade,
-                                        criterion.id,
-                                        "description",
-                                        v,
-                                      )
-                                    }
-                                    onRemove={() =>
-                                      handleRemoveCriterionFromGrade(grade, criterion.id)
-                                    }
-                                  />
-                                ))}
-                              </div>
-                            ) : (
-                              <div className="text-center py-10 text-muted-foreground">
-                                <p className="text-sm">Sin criterios para {grade}</p>
-                                <p className="text-xs mt-1">
-                                  Usá el campo de arriba para agregar el primero
-                                </p>
-                              </div>
-                            )}
-                          </>
-                        )}
-                      </TabsContent>
-                    )
-                  })}
-                </Tabs>
+                            <Switch checked={true} />
+                          </div>
+                        </AlertDialogTrigger>
+                        <AlertDialogContent>
+                          <AlertDialogHeader>
+                            <AlertDialogTitle>¿Unificar criterios?</AlertDialogTitle>
+                            <AlertDialogDescription>
+                              Se van a usar los criterios de {selectedSubject.appliesTo[0]} para todos los grados. Los criterios específicos de cada grado se van a perder.
+                            </AlertDialogDescription>
+                          </AlertDialogHeader>
+                          <AlertDialogFooter>
+                            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                            <AlertDialogAction onClick={handleCollapseToShared}>
+                              Unificar
+                            </AlertDialogAction>
+                          </AlertDialogFooter>
+                        </AlertDialogContent>
+                      </AlertDialog>
+                    </div>
+                  </Tabs>
+                )}
               </CardContent>
 
               {/* Save bar */}
@@ -611,9 +811,7 @@ export default function MateriasPage() {
           ) : (
             <CardContent className="flex flex-col items-center justify-center h-full min-h-[300px] gap-2">
               <p className="text-muted-foreground text-sm">Seleccioná una materia para editarla</p>
-              <p className="text-xs text-muted-foreground">
-                o creá una nueva en el panel izquierdo
-              </p>
+              <p className="text-xs text-muted-foreground">o creá una nueva en el panel izquierdo</p>
             </CardContent>
           )}
         </Card>

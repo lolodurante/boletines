@@ -16,6 +16,8 @@ const subjectSchema = z.object({
   id: z.string().min(1),
   name: z.string().trim().min(1),
   reportType: z.enum(["ESPANOL", "INGLES"]).default("ESPANOL"),
+  entryKind: z.enum(["ACADEMIC", "TEACHER_OBSERVATION", "ABSENCES"]).default("ACADEMIC"),
+  hasNumericGrade: z.boolean().default(false),
   appliesTo: z.array(z.string().min(1)).min(1),
   criteriaByGrade: z.array(
     z.object({
@@ -97,17 +99,23 @@ export async function POST(request: Request) {
       for (const subject of parsed.data.subjects) {
         const gradeRange = subject.appliesTo.map(normalizeGrade)
         const activeGrades = new Set(gradeRange)
+        const reportType = subject.entryKind === "ABSENCES" ? "INGLES" : subject.reportType
+        const hasNumericGrade = subject.entryKind === "ACADEMIC" && subject.hasNumericGrade
         const savedSubject = isUuid(subject.id)
           ? await tx.subject.upsert({
               where: { id: subject.id },
               create: {
                 name: subject.name,
-                type: subject.reportType,
+                type: reportType,
+                entryKind: subject.entryKind,
+                hasNumericGrade,
                 gradeRange,
               },
               update: {
                 name: subject.name,
-                type: subject.reportType,
+                type: reportType,
+                entryKind: subject.entryKind,
+                hasNumericGrade,
                 gradeRange,
                 active: true,
               },
@@ -117,11 +125,15 @@ export async function POST(request: Request) {
               where: { name: subject.name },
               create: {
                 name: subject.name,
-                type: subject.reportType,
+                type: reportType,
+                entryKind: subject.entryKind,
+                hasNumericGrade,
                 gradeRange,
               },
               update: {
-                type: subject.reportType,
+                type: reportType,
+                entryKind: subject.entryKind,
+                hasNumericGrade,
                 gradeRange,
                 active: true,
               },

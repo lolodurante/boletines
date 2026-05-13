@@ -57,6 +57,7 @@ const directorNavItems: NavItem[] = [
     children: [
       { label: "Escalas de calificación", href: "/director/configuracion/escalas" },
       { label: "Materias y criterios", href: "/director/configuracion/materias" },
+      { label: "Orden de boletines", href: "/director/configuracion/orden-boletines" },
       { label: "Períodos", href: "/director/configuracion/periodos" },
       { label: "Docentes y asignaciones", href: "/director/configuracion/docentes" },
       { label: "Cursos y alumnos", href: "/director/configuracion/alumnos" },

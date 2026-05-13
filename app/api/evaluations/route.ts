@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server"
+import type { Prisma } from "@prisma/client"
 import { z } from "zod"
 import { prisma } from "@/lib/db/client"
 import { logWarning } from "@/lib/logger"
@@ -13,6 +14,8 @@ const evaluationSaveSchema = z.object({
   periodId: z.string().min(1),
   generalObservation: z.string().optional(),
   submit: z.boolean().optional(),
+  specialValues: z.record(z.string(), z.string()).optional(),
+  numericGrades: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
   grades: z.array(
     z.object({
       studentId: z.string().min(1),
@@ -20,7 +23,6 @@ const evaluationSaveSchema = z.object({
       grade: z.string().min(1),
     }),
   ),
-  observations: z.record(z.string(), z.string()).optional(),
 })
 
 function hasConfiguredDatabase() {
@@ -35,6 +37,72 @@ function courseParts(courseId: string) {
   return {
     grade: match[1]!,
     division: match[2]!.toUpperCase(),
+  }
+}
+
+async function updateReadyReportCards(
+  tx: Prisma.TransactionClient,
+  input: {
+    course: { grade: string; division: string }
+    periodId: string
+    studentIds: string[]
+  },
+) {
+  const allAssignments = await tx.courseAssignment.findMany({
+    where: {
+      grade: input.course.grade,
+      division: input.course.division,
+      periodId: input.periodId,
+      subject: { active: true },
+    },
+    select: { teacherId: true, subjectId: true, subject: { select: { type: true } } },
+  })
+
+  if (allAssignments.length === 0) return
+
+  const submittedEvals = await tx.evaluation.findMany({
+    where: {
+      studentId: { in: input.studentIds },
+      periodId: input.periodId,
+      status: { in: ["SUBMITTED", "APPROVED"] },
+    },
+    select: { studentId: true, teacherId: true, subjectId: true },
+  })
+
+  const reportTypes = Array.from(new Set(allAssignments.map((assignment) => assignment.subject.type)))
+  for (const reportType of reportTypes) {
+    const requiredAssignments = allAssignments.filter((assignment) => assignment.subject.type === reportType)
+    const completeStudentIds = input.studentIds.filter((studentId) =>
+      requiredAssignments.every((assignment) =>
+        submittedEvals.some(
+          (evaluation) =>
+            evaluation.studentId === studentId &&
+            evaluation.teacherId === assignment.teacherId &&
+            evaluation.subjectId === assignment.subjectId,
+        ),
+      ),
+    )
+
+    for (const studentId of completeStudentIds) {
+      const updated = await tx.reportCard.updateMany({
+        where: {
+          studentId,
+          periodId: input.periodId,
+          type: reportType,
+          status: { in: ["NOT_READY", "NEEDS_REVISION"] },
+        },
+        data: { status: "READY_FOR_REVIEW" },
+      })
+      if (updated.count === 0) {
+        try {
+          await tx.reportCard.create({
+            data: { studentId, periodId: input.periodId, type: reportType, status: "READY_FOR_REVIEW" },
+          })
+        } catch {
+          // ReportCard already exists in a later state (READY_FOR_REVIEW/APPROVED/SENT), leave it.
+        }
+      }
+    }
   }
 }
 
@@ -109,6 +177,89 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "El payload incluye alumnos que no pertenecen al curso" }, { status: 400 })
     }
 
+    const unknownNumericStudentIds = Object.keys(input.numericGrades ?? {}).filter(
+      (studentId) => !validStudentIds.has(studentId),
+    )
+    if (unknownNumericStudentIds.length > 0) {
+      return NextResponse.json({ error: "El payload incluye alumnos que no pertenecen al curso" }, { status: 400 })
+    }
+
+    const subject = await prisma.subject.findUnique({
+      where: { id: input.subjectId },
+      select: { entryKind: true, hasNumericGrade: true },
+    })
+    if (!subject) {
+      return NextResponse.json({ error: "Materia no encontrada" }, { status: 404 })
+    }
+
+    if (subject.entryKind !== "ACADEMIC") {
+      const specialValues = input.specialValues ?? {}
+      const unknownSpecialStudentIds = Object.keys(specialValues).filter((studentId) => !validStudentIds.has(studentId))
+      if (unknownSpecialStudentIds.length > 0) {
+        return NextResponse.json({ error: "El payload incluye alumnos que no pertenecen al curso" }, { status: 400 })
+      }
+
+      if (input.submit) {
+        for (const studentId of validStudentIds) {
+          if (!(specialValues[studentId] ?? "").trim()) {
+            return NextResponse.json({ error: "Faltan datos para marcar como completo" }, { status: 400 })
+          }
+        }
+      }
+
+      const status = input.submit ? "SUBMITTED" : "DRAFT"
+      const submittedAt = input.submit ? new Date() : null
+      const studentIdsToPersist = new Set<string>()
+      Object.entries(specialValues).forEach(([studentId, value]) => {
+        if (validStudentIds.has(studentId) && value.trim()) studentIdsToPersist.add(studentId)
+      })
+      if (input.submit) students.forEach((student) => studentIdsToPersist.add(student.id))
+
+      await prisma.$transaction(async (tx) => {
+        for (const studentId of studentIdsToPersist) {
+          const value = specialValues[studentId]?.trim() || null
+          await tx.evaluation.upsert({
+            where: {
+              studentId_teacherId_subjectId_periodId: {
+                studentId,
+                teacherId,
+                subjectId: input.subjectId,
+                periodId: input.periodId,
+              },
+            },
+            create: {
+              studentId,
+              teacherId,
+              subjectId: input.subjectId,
+              periodId: input.periodId,
+              status,
+              submittedAt,
+              generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
+              specialValue: subject.entryKind === "ABSENCES" ? value : null,
+              numericGrade: null,
+            },
+            update: {
+              status,
+              submittedAt,
+              generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
+              specialValue: subject.entryKind === "ABSENCES" ? value : null,
+              numericGrade: null,
+            },
+          })
+        }
+
+        if (input.submit) {
+          await updateReadyReportCards(tx, {
+            course,
+            periodId: input.periodId,
+            studentIds: Array.from(validStudentIds),
+          })
+        }
+      })
+
+      return NextResponse.json({ ok: true, persisted: true })
+    }
+
     const criteria = await prisma.evaluationCriterion.findMany({
       where: {
         subjectId: input.subjectId,
@@ -143,6 +294,10 @@ export async function POST(request: Request) {
             return NextResponse.json({ error: "Faltan calificaciones para marcar como completo" }, { status: 400 })
           }
         }
+
+        if (subject.hasNumericGrade && !input.numericGrades?.[studentId]) {
+          return NextResponse.json({ error: "Faltan notas numericas para marcar como completo" }, { status: 400 })
+        }
       }
     }
 
@@ -166,15 +321,11 @@ export async function POST(request: Request) {
     const submittedAt = input.submit ? new Date() : null
     const studentIdsToPersist = new Set<string>()
     input.grades.forEach((grade) => studentIdsToPersist.add(grade.studentId))
-    Object.entries(input.observations ?? {}).forEach(([studentId, observation]) => {
-      if (validStudentIds.has(studentId) && observation.trim()) studentIdsToPersist.add(studentId)
-    })
     if (input.submit) students.forEach((student) => studentIdsToPersist.add(student.id))
 
     await prisma.$transaction(async (tx) => {
       for (const studentId of studentIdsToPersist) {
         const studentGrades = input.grades.filter((grade) => grade.studentId === studentId)
-        const studentObservation = input.observations?.[studentId]?.trim() || null
 
         const evaluation = await tx.evaluation.upsert({
           where: {
@@ -193,11 +344,15 @@ export async function POST(request: Request) {
             status,
             submittedAt,
             generalObservation: input.generalObservation?.trim() || null,
+            specialValue: null,
+            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
           },
           update: {
             status,
             submittedAt,
             generalObservation: input.generalObservation?.trim() || null,
+            specialValue: null,
+            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
           },
           select: { id: true },
         })
@@ -227,73 +382,22 @@ export async function POST(request: Request) {
               evaluationId: evaluation.id,
               criterionId: grade.criterionId,
               scaleLevelId,
-              observation: studentObservation,
+              observation: null,
             },
             update: {
               scaleLevelId,
-              observation: studentObservation,
+              observation: null,
             },
           })
         }
       }
 
       if (input.submit) {
-        const allAssignments = await tx.courseAssignment.findMany({
-          where: {
-            grade: course.grade,
-            division: course.division,
-            periodId: input.periodId,
-            subject: { active: true },
-          },
-          select: { teacherId: true, subjectId: true, subject: { select: { type: true } } },
+        await updateReadyReportCards(tx, {
+          course,
+          periodId: input.periodId,
+          studentIds: Array.from(validStudentIds),
         })
-
-        if (allAssignments.length === 0) return
-
-        const submittedEvals = await tx.evaluation.findMany({
-          where: {
-            studentId: { in: Array.from(validStudentIds) },
-            periodId: input.periodId,
-            status: { in: ["SUBMITTED", "APPROVED"] },
-          },
-          select: { studentId: true, teacherId: true, subjectId: true },
-        })
-
-        const reportTypes = Array.from(new Set(allAssignments.map((assignment) => assignment.subject.type)))
-        for (const reportType of reportTypes) {
-          const requiredAssignments = allAssignments.filter((assignment) => assignment.subject.type === reportType)
-          const completeStudentIds = Array.from(validStudentIds).filter((studentId) =>
-            requiredAssignments.every((assignment) =>
-              submittedEvals.some(
-                (e) =>
-                  e.studentId === studentId &&
-                  e.teacherId === assignment.teacherId &&
-                  e.subjectId === assignment.subjectId,
-              ),
-            ),
-          )
-
-          for (const studentId of completeStudentIds) {
-            const updated = await tx.reportCard.updateMany({
-              where: {
-                studentId,
-                periodId: input.periodId,
-                type: reportType,
-                status: { in: ["NOT_READY", "NEEDS_REVISION"] },
-              },
-              data: { status: "READY_FOR_REVIEW" },
-            })
-            if (updated.count === 0) {
-              try {
-                await tx.reportCard.create({
-                  data: { studentId, periodId: input.periodId, type: reportType, status: "READY_FOR_REVIEW" },
-                })
-              } catch {
-                // ReportCard already exists in a later state (READY_FOR_REVIEW/APPROVED/SENT), leave it.
-              }
-            }
-          }
-        }
       }
     })
 

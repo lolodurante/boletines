@@ -34,9 +34,10 @@ import {
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
 import { ScrollArea } from "@/components/ui/scroll-area"
-import { 
+import {
   Download,
   FileText,
+  FolderDown,
   MessageSquare
 } from "lucide-react"
 import { toast } from "sonner"
@@ -65,6 +66,8 @@ interface ReportCardData {
     teacherName: string
     criteria: Array<{ name: string; grade: GradeLevel }>
     observation?: string
+    specialValue?: string
+    numericGrade?: number
   }>
 }
 
@@ -83,10 +86,22 @@ export default function BoletinesPage() {
   const [isRevisionDialogOpen, setIsRevisionDialogOpen] = useState(false)
   const [revisionTeacher, setRevisionTeacher] = useState("")
   const [revisionMessage, setRevisionMessage] = useState("")
+  const [isBulkDownloading, setIsBulkDownloading] = useState(false)
+  const [selectedPeriodFilter, setSelectedPeriodFilter] = useState("all")
 
-  const filteredReportCards = selectedCourseFilter === "all"
-    ? dynamicReportCardsData
-    : dynamicReportCardsData.filter(r => r.courseId === selectedCourseFilter)
+  const filteredReportCards = dynamicReportCardsData.filter(r =>
+    (selectedCourseFilter === "all" || r.courseId === selectedCourseFilter) &&
+    (selectedPeriodFilter === "all" || r.periodId === selectedPeriodFilter)
+  )
+
+  const availableForBulk = filteredReportCards.filter(
+    r => r.status === "PDF generado" || r.status === "Listo para revisión",
+  )
+  const periods = Array.from(new Map(dynamicReportCardsData.map(r => [r.periodId, r.periodName])).entries())
+  const bulkDownloadParams = new URLSearchParams()
+  if (selectedPeriodFilter !== "all") bulkDownloadParams.set("periodId", selectedPeriodFilter)
+  if (selectedCourseFilter !== "all") bulkDownloadParams.set("courseId", selectedCourseFilter)
+  const bulkDownloadHref = `/api/report-cards/bulk-download${bulkDownloadParams.size > 0 ? `?${bulkDownloadParams}` : ""}`
 
   const selectedReport = dynamicReportCardsData.find(r => r.id === selectedReportId)
   const selectedReportTeachers = Array.from(
@@ -171,6 +186,18 @@ export default function BoletinesPage() {
     toast.success("PDF generado y descargado")
   }
 
+  const handleBulkDownload = async () => {
+    if (availableForBulk.length === 0) {
+      toast.error("No hay boletines listos para descargar")
+      return
+    }
+
+    setIsBulkDownloading(true)
+    window.setTimeout(() => {
+      setIsBulkDownloading(false)
+    }, 1500)
+  }
+
   const handleRequestRevision = async () => {
     if (!selectedReport) return
     const response = await fetch("/api/report-cards", {
@@ -216,25 +243,58 @@ export default function BoletinesPage() {
         <div className="flex flex-col min-h-0">
           <Card className="flex flex-col min-h-0 h-full">
             <CardHeader className="shrink-0 pb-3">
-              <div className="flex items-center justify-between">
-                <div>
-                  <CardTitle className="text-base">Alumnos</CardTitle>
-                  <CardDescription>
-                    {filteredReportCards.length} de {dynamicReportCardsData.length} boletines
-                  </CardDescription>
-                </div>
+              <div>
+                <CardTitle className="text-base">Boletines</CardTitle>
+                <CardDescription>
+                  {filteredReportCards.length} de {dynamicReportCardsData.length} boletines
+                </CardDescription>
               </div>
-              <Select value={selectedCourseFilter} onValueChange={setSelectedCourseFilter}>
-                <SelectTrigger className="h-8 text-sm">
-                  <SelectValue placeholder="Filtrar por curso" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Todos los cursos</SelectItem>
-                  {data.courses.map(course => (
-                    <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+              <div className="grid grid-cols-1 gap-2">
+                <Select value={selectedPeriodFilter} onValueChange={setSelectedPeriodFilter}>
+                  <SelectTrigger className="h-8 w-full min-w-0 text-sm">
+                    <SelectValue placeholder="Período" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los períodos</SelectItem>
+                    {periods.map(([id, name]) => (
+                      <SelectItem key={id} value={id}>{name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Select value={selectedCourseFilter} onValueChange={setSelectedCourseFilter}>
+                  <SelectTrigger className="h-8 w-full min-w-0 text-sm">
+                    <SelectValue placeholder="Curso" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="all">Todos los cursos</SelectItem>
+                    {data.courses.map(course => (
+                      <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  asChild
+                  size="sm"
+                  variant="outline"
+                  disabled={isBulkDownloading || availableForBulk.length === 0}
+                  title={availableForBulk.length === 0 ? "No hay boletines listos para descargar" : `Descargar ${availableForBulk.length} boletines`}
+                  className="w-full"
+                >
+                  <a
+                    href={availableForBulk.length > 0 ? bulkDownloadHref : "#"}
+                    onClick={(event) => {
+                      if (availableForBulk.length === 0 || isBulkDownloading) {
+                        event.preventDefault()
+                      }
+                      handleBulkDownload()
+                    }}
+                  >
+                    <FolderDown className="size-4" />
+                    <span>{isBulkDownloading ? "Preparando ZIP..." : "Descargar todos"}</span>
+                    <span className="text-muted-foreground">({availableForBulk.length})</span>
+                  </a>
+                </Button>
+              </div>
             </CardHeader>
             <CardContent className="flex-1 min-h-0 p-0">
               <ScrollArea className="h-[360px] lg:h-full">
@@ -334,14 +394,23 @@ export default function BoletinesPage() {
                               {subject.teacherName}
                             </span>
                           </div>
-                          <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
-                            {subject.criteria.map((c, cidx) => (
-                              <div key={cidx} className="flex items-center justify-between text-sm border rounded-md p-2">
-                                <span className="text-muted-foreground text-xs">{c.name}</span>
-                                <GradeBadge grade={c.grade} />
-                              </div>
-                            ))}
-                          </div>
+                          {subject.criteria.length > 0 ? (
+                            <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 2xl:grid-cols-3">
+                              {subject.criteria.map((c, cidx) => (
+                                <div key={cidx} className="flex items-center justify-between text-sm border rounded-md p-2">
+                                  <span className="text-muted-foreground text-xs">{c.name}</span>
+                                  <GradeBadge grade={c.grade} />
+                                </div>
+                              ))}
+                            </div>
+                          ) : subject.specialValue ? (
+                            <div className="rounded-md border p-2 text-sm">{subject.specialValue}</div>
+                          ) : null}
+                          {typeof subject.numericGrade === "number" && (
+                            <div className="rounded-md border p-2 text-sm font-medium">
+                              Nota: {subject.numericGrade}
+                            </div>
+                          )}
                         </div>
                       ))}
                     </div>

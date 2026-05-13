@@ -5,6 +5,8 @@ export const subjectSchema = z.object({
   id: idSchema,
   name: z.string().min(1),
   type: z.enum(["ESPANOL", "INGLES"]),
+  entryKind: z.enum(["ACADEMIC", "TEACHER_OBSERVATION", "ABSENCES"]).default("ACADEMIC"),
+  hasNumericGrade: z.boolean().default(false),
   gradeRange: z.array(z.string().min(1)).min(1),
   active: z.boolean(),
 })

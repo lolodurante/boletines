@@ -138,9 +138,21 @@ export async function POST(request: Request) {
           include: { criterion: true, scaleLevel: true },
         },
       },
-      orderBy: [{ subject: { name: "asc" } }],
+      orderBy: [{ subject: { order: "asc" } }],
     })
-    const evaluationsWithGrades = evaluations.filter((evaluation) => evaluation.grades.length > 0)
+    const evaluationsWithGrades = evaluations.filter(
+      (evaluation) => evaluation.subject.entryKind === "ACADEMIC" && evaluation.grades.length > 0,
+    )
+    const absenceEvaluations = evaluations.filter(
+      (evaluation) => evaluation.subject.entryKind === "ABSENCES" && evaluation.specialValue,
+    )
+    const commentEvaluations = evaluations.filter((evaluation) => {
+      const value = evaluation.subject.entryKind === "TEACHER_OBSERVATION"
+        ? evaluation.generalObservation || evaluation.specialValue
+        : evaluation.generalObservation
+
+      return Boolean(value)
+    })
     if (evaluationsWithGrades.length === 0) {
       return NextResponse.json({ error: "El boletin no tiene evaluaciones completas para generar" }, { status: 400 })
     }
@@ -155,12 +167,28 @@ export async function POST(request: Request) {
       subjects: evaluationsWithGrades.map((evaluation) => ({
         subjectName: evaluation.subject.name,
         teacherName: evaluation.teacher.user.name,
+        numericGrade: evaluation.subject.hasNumericGrade ? evaluation.numericGrade ?? undefined : undefined,
         criteria: evaluation.grades.map((grade) => ({
           name: grade.criterion.name,
           gradeLabel: grade.scaleLevel.label,
-          observation: grade.observation ?? undefined,
         })),
       })),
+      absences:
+        reportCard.type === "INGLES"
+          ? absenceEvaluations.map((evaluation) => ({
+              label: evaluation.subject.name,
+              value: evaluation.specialValue ?? "",
+            }))
+          : undefined,
+      comments:
+        reportCard.type === "INGLES"
+          ? commentEvaluations.map((evaluation) => ({
+              label: evaluation.subject.entryKind === "TEACHER_OBSERVATION"
+                ? "Comentario"
+                : `Comentario ${evaluation.subject.name}`,
+              value: evaluation.generalObservation || evaluation.specialValue || "",
+            }))
+          : undefined,
       directorObservation: generateInput.directorObservation || undefined,
       branding: {
         primaryColor: "#2563eb",

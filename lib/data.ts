@@ -10,6 +10,7 @@ export type ReportStatus =
   | "Requiere revisión"
 
 export type ReportCardType = "ESPANOL" | "INGLES"
+export type SubjectEntryKind = "ACADEMIC" | "TEACHER_OBSERVATION" | "ABSENCES"
 
 export type PeriodStatus = "Activo" | "Cerrado" | "Próximo"
 
@@ -43,6 +44,8 @@ export interface Subject {
   id: string
   name: string
   reportType: ReportCardType
+  entryKind?: SubjectEntryKind
+  hasNumericGrade?: boolean
   appliesTo: string[]
   criteriaByGrade: GradeCriteria[]
 }
@@ -72,7 +75,8 @@ export interface Evaluation {
   lastUpdated: string
   grades: Record<string, GradeLevel>
   observation?: string
-  studentObservation?: string
+  specialValue?: string
+  numericGrade?: number
 }
 
 export interface ReportCard {

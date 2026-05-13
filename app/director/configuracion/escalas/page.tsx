@@ -444,7 +444,7 @@ export default function EscalasPage() {
                   {scale.levels.map((level, i) => {
                     const colorOpt = colorOptions.find(c => c.value === level.color)
                     return (
-                      <TableRow key={level.name}>
+                      <TableRow key={i}>
                         <TableCell className="font-medium">{level.name}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

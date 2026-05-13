@@ -1,3 +1,6 @@
+import fs from "node:fs"
+import path from "node:path"
+import { inflateSync, deflateSync } from "node:zlib"
 import { reportCardPdfDataSchema, type ReportCardPdfData } from "./report-card-data.schema"
 
 export interface GeneratedPdf {
@@ -14,6 +17,10 @@ const TOP_Y = PAGE_HEIGHT - MARGIN
 const BOTTOM_Y = MARGIN
 const DEFAULT_LEVELS = ["DESTACADO", "AVANZADO", "ALCANZADO", "EN PROCESO", "NO ALCANZÓ LOS OBJETIVOS"]
 
+const HEADER_LOGO_HEIGHT = 130
+const HEADER_NO_LOGO_HEIGHT = 50
+const STUDENT_ROW_HEIGHT = 25
+
 type Font = "regular" | "bold"
 
 interface PdfPage {
@@ -21,10 +28,18 @@ interface PdfPage {
   y: number
 }
 
+interface LogoData {
+  streamBuffer: Buffer  // ready-to-embed bytes (JPEG or deflate-compressed RGB)
+  width: number
+  height: number
+  filter: "DCTDecode" | "FlateDecode"
+  decodeParms?: string
+}
+
 function sanitizeFilePart(value: string) {
   return value
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "")
@@ -32,8 +47,8 @@ function sanitizeFilePart(value: string) {
 
 function normalizeText(value: string) {
   return value
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
+    .replace(/[""]/g, '"')
+    .replace(/['']/g, "'")
     .replace(/[–—]/g, "-")
     .replace(/\s+/g, " ")
     .trim()
@@ -42,7 +57,7 @@ function normalizeText(value: string) {
 function normalizeLabel(value: string) {
   return normalizeText(value)
     .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toUpperCase()
 }
 
@@ -102,22 +117,144 @@ function addPage(pages: PdfPage[]): PdfPage {
   return page
 }
 
-function addDocumentHeader(page: PdfPage, data: ReportCardPdfData) {
+function paeth(a: number, b: number, c: number) {
+  const p = a + b - c
+  const pa = Math.abs(p - a), pb = Math.abs(p - b), pc = Math.abs(p - c)
+  if (pa <= pb && pa <= pc) return a
+  if (pb <= pc) return b
+  return c
+}
+
+function loadPng(buffer: Buffer): LogoData | null {
+  // Verify PNG signature
+  const sig = [137, 80, 78, 71, 13, 10, 26, 10]
+  for (let i = 0; i < 8; i++) if (buffer[i] !== sig[i]) return null
+
+  let offset = 8
+  let width = 0, height = 0, colorType = 0
+  const idatChunks: Buffer[] = []
+
+  while (offset + 8 <= buffer.length) {
+    const len = buffer.readUInt32BE(offset)
+    const type = buffer.subarray(offset + 4, offset + 8).toString("ascii")
+    const data = buffer.subarray(offset + 8, offset + 8 + len)
+    offset += 12 + len
+
+    if (type === "IHDR") {
+      width = data.readUInt32BE(0)
+      height = data.readUInt32BE(4)
+      // bitDepth = data[8]  (assumed 8)
+      colorType = data[9]!
+    } else if (type === "IDAT") {
+      idatChunks.push(Buffer.from(data))
+    } else if (type === "IEND") break
+  }
+
+  if (!width || !height || !idatChunks.length) return null
+
+  const channels = colorType === 2 ? 3 : colorType === 6 ? 4 : null
+  if (!channels) return null
+
+  const raw = inflateSync(Buffer.concat(idatChunks))
+  const stride = width * channels
+  const recon = Buffer.alloc(height * stride)
+  const rgb = Buffer.alloc(height * width * 3)
+
+  for (let y = 0; y < height; y++) {
+    const f = raw[y * (1 + stride)]!
+    const base = y * (1 + stride) + 1
+    const dst = y * stride
+
+    for (let x = 0; x < stride; x++) {
+      const r = raw[base + x]!
+      const a = x >= channels ? recon[dst + x - channels]! : 0
+      const b = y > 0 ? recon[(y - 1) * stride + x]! : 0
+      const c = y > 0 && x >= channels ? recon[(y - 1) * stride + x - channels]! : 0
+      recon[dst + x] = f === 0 ? r : f === 1 ? (r + a) & 0xFF : f === 2 ? (r + b) & 0xFF
+        : f === 3 ? (r + ((a + b) >> 1)) & 0xFF : (r + paeth(a, b, c)) & 0xFF
+    }
+
+    for (let x = 0; x < width; x++) {
+      const s = dst + x * channels
+      const d = (y * width + x) * 3
+      rgb[d] = recon[s]!
+      rgb[d + 1] = recon[s + 1]!
+      rgb[d + 2] = recon[s + 2]!
+    }
+  }
+
+  // Re-compress as deflate with PNG None filter (simpler, compatible with Predictor 15)
+  const rows = Buffer.alloc(height * (1 + width * 3))
+  for (let y = 0; y < height; y++) {
+    rows[y * (1 + width * 3)] = 0  // filter None
+    rgb.copy(rows, y * (1 + width * 3) + 1, y * width * 3, (y + 1) * width * 3)
+  }
+  const streamBuffer = deflateSync(rows)
+
+  return {
+    streamBuffer,
+    width,
+    height,
+    filter: "FlateDecode",
+    decodeParms: `<< /Predictor 15 /Colors 3 /BitsPerComponent 8 /Columns ${width} >>`,
+  }
+}
+
+function loadJpeg(buffer: Buffer): LogoData | null {
+  if (buffer[0] !== 0xFF || buffer[1] !== 0xD8) return null
+  let i = 2
+  while (i < buffer.length - 9) {
+    if (buffer[i] !== 0xFF) { i++; continue }
+    const marker = buffer[i + 1]
+    if (marker === 0xC0 || marker === 0xC1 || marker === 0xC2 || marker === 0xC3) {
+      const height = (buffer[i + 5]! << 8) | buffer[i + 6]!
+      const width = (buffer[i + 7]! << 8) | buffer[i + 8]!
+      return { streamBuffer: buffer, width, height, filter: "DCTDecode" }
+    }
+    if (marker === 0xD8 || marker === 0xD9 || marker === 0x01) { i += 2; continue }
+    i += 2 + ((buffer[i + 2]! << 8) | buffer[i + 3]!)
+  }
+  return null
+}
+
+function loadLogo(): LogoData | null {
+  for (const name of ["logo-labarden.png", "logo-labarden.jpg"]) {
+    try {
+      const buf = fs.readFileSync(path.join(process.cwd(), "public", name))
+      const logo = name.endsWith(".png") ? loadPng(buf) : loadJpeg(buf)
+      if (logo) return logo
+    } catch { continue }
+  }
+  return null
+}
+
+function addDocumentHeader(page: PdfPage, data: ReportCardPdfData, logo: LogoData | null) {
   const period = normalizeText(data.period.name).toUpperCase()
   const course = `${data.student.grade}${data.student.division ? ` ${data.student.division}` : ""}`
+  const centerX = PAGE_WIDTH / 2
 
-  page.commands.push(rect(MARGIN, page.y - 28, CONTENT_WIDTH, 28))
-  page.commands.push(text(`COLEGIO LABARDÉN - BOLETÍN ${period}`, PAGE_WIDTH / 2, page.y - 18, {
-    size: 13,
-    font: "bold",
-    align: "center",
-  }))
-  page.y -= 28
+  if (logo) {
+    const logoDisplayWidth = 72
+    const logoDisplayHeight = Math.round(logoDisplayWidth * logo.height / logo.width)
+    const logoX = centerX - logoDisplayWidth / 2
+    const logoY = page.y - logoDisplayHeight - 8
+    page.commands.push(
+      `q ${logoDisplayWidth} 0 0 ${logoDisplayHeight} ${logoX.toFixed(2)} ${logoY.toFixed(2)} cm /Im1 Do Q`
+    )
 
-  page.commands.push(rect(MARGIN, page.y - 25, CONTENT_WIDTH, 25))
+    const titleY = page.y - logoDisplayHeight - 8 - 16
+    page.commands.push(text("COLEGIO LABARDÉN", centerX, titleY, { size: 16, font: "bold", align: "center" }))
+    page.commands.push(text("Testes Luminis", centerX, titleY - 14, { size: 9, align: "center" }))
+    page.commands.push(text(`Boletín de Calificaciones  —  ${period}`, centerX, titleY - 27, { size: 9, align: "center" }))
+
+    page.y -= HEADER_LOGO_HEIGHT
+    page.commands.push(`q 0 0 0 RG 1 w ${MARGIN} ${page.y} ${CONTENT_WIDTH} 0 re S Q`)
+  }
+
+  page.commands.push(rect(MARGIN, page.y - STUDENT_ROW_HEIGHT, CONTENT_WIDTH, STUDENT_ROW_HEIGHT))
   page.commands.push(text(`NOMBRE DEL ALUMNO: ${data.student.fullName}`, MARGIN + 8, page.y - 17, { size: 11, font: "bold" }))
   page.commands.push(text(`CURSO: ${course}`, PAGE_WIDTH - MARGIN - 115, page.y - 17, { size: 11, font: "bold" }))
-  page.y -= 25
+  page.y -= STUDENT_ROW_HEIGHT
 }
 
 function getLevelLabels(data: ReportCardPdfData) {
@@ -136,11 +273,11 @@ function getLevelLabels(data: ReportCardPdfData) {
 function addTableHeader(page: PdfPage, levelLabels: string[]) {
   const indicatorWidth = levelLabels.length <= 5 ? 245 : 220
   const levelWidth = (CONTENT_WIDTH - indicatorWidth) / levelLabels.length
-  const rowHeight = 37
+  const rowHeight = 30
 
   page.commands.push(rect(MARGIN, page.y - rowHeight, indicatorWidth, rowHeight, "0.93 0.93 0.93"))
-  page.commands.push(text("Indicadores de logro en las áreas", MARGIN + indicatorWidth / 2, page.y - 22, {
-    size: 10,
+  page.commands.push(text("Indicadores de logro en las áreas", MARGIN + indicatorWidth / 2, page.y - 19, {
+    size: 9,
     font: "bold",
     align: "center",
   }))
@@ -148,9 +285,9 @@ function addTableHeader(page: PdfPage, levelLabels: string[]) {
   levelLabels.forEach((label, index) => {
     const x = MARGIN + indicatorWidth + index * levelWidth
     page.commands.push(rect(x, page.y - rowHeight, levelWidth, rowHeight, "0.93 0.93 0.93"))
-    wrapText(label, levelWidth - 8, 8).slice(0, 3).forEach((line, lineIndex) => {
-      page.commands.push(text(line, x + levelWidth / 2, page.y - 13 - lineIndex * 10, {
-        size: 8,
+    wrapText(label, levelWidth - 6, 7).slice(0, 3).forEach((line, lineIndex) => {
+      page.commands.push(text(line, x + levelWidth / 2, page.y - 11 - lineIndex * 8, {
+        size: 7,
         font: "bold",
         align: "center",
       }))
@@ -160,13 +297,13 @@ function addTableHeader(page: PdfPage, levelLabels: string[]) {
   page.y -= rowHeight
 }
 
-function ensureSpace(pages: PdfPage[], minHeight: number, data: ReportCardPdfData, levelLabels: string[]) {
+function ensureSpace(pages: PdfPage[], minHeight: number, data: ReportCardPdfData, levelLabels: string[], logo: LogoData | null) {
   let page = pages[pages.length - 1]
   if (!page) page = addPage(pages)
   if (page.y - minHeight >= BOTTOM_Y) return page
 
   page = addPage(pages)
-  addDocumentHeader(page, data)
+  addDocumentHeader(page, data, null) // no logo on continuation pages
   addTableHeader(page, levelLabels)
   return page
 }
@@ -225,67 +362,114 @@ function addObservationRow(page: PdfPage, label: string, value: string) {
 }
 
 function createPdfBuffer(data: ReportCardPdfData) {
+  const logo = loadLogo()
   const pages: PdfPage[] = []
   let page = addPage(pages)
   const levelLabels = getLevelLabels(data)
 
-  addDocumentHeader(page, data)
+  addDocumentHeader(page, data, logo)
+
+  if (data.absences?.length) {
+    for (const absence of data.absences) {
+      page = ensureSpace(pages, 32, data, levelLabels, logo)
+      addObservationRow(page, absence.label, absence.value)
+    }
+  }
+
   addTableHeader(page, levelLabels)
 
   for (const subject of data.subjects) {
-    page = ensureSpace(pages, 60, data, levelLabels)
+    page = ensureSpace(pages, 60, data, levelLabels, logo)
     addSubjectSection(page, subject.subjectName, subject.teacherName)
 
     for (const criterion of subject.criteria) {
-      page = ensureSpace(pages, getCriterionRowHeight(criterion, levelLabels), data, levelLabels)
+      page = ensureSpace(pages, getCriterionRowHeight(criterion, levelLabels), data, levelLabels, logo)
       addCriterionRow(page, criterion, levelLabels)
+    }
+
+    if (typeof subject.numericGrade === "number") {
+      page = ensureSpace(pages, 32, data, levelLabels, logo)
+      addObservationRow(page, "Nota", String(subject.numericGrade))
+    }
+  }
+
+  if (data.comments?.length) {
+    for (const comment of data.comments) {
+      page = ensureSpace(pages, 32, data, levelLabels, logo)
+      addObservationRow(page, comment.label, comment.value)
     }
   }
 
   if (data.directorObservation) {
-    page = ensureSpace(pages, 42, data, levelLabels)
+    page = ensureSpace(pages, 42, data, levelLabels, logo)
     addObservationRow(page, "Observación", data.directorObservation)
   }
 
-  const pageObjectIds: number[] = []
-  const contentObjects = pages.map((pdfPage) => pdfPage.commands.join("\n"))
-  for (const [index] of contentObjects.entries()) {
-    pageObjectIds.push(5 + index * 2)
-  }
+  // Fixed objects: Catalog, Pages, Font Regular, Font Bold [, Image XObject]
+  // Object IDs start at 1
+  const CATALOG_ID = 1
+  const PAGES_ID = 2
+  const FONT_REGULAR_ID = 3
+  const FONT_BOLD_ID = 4
+  const IMAGE_ID = logo ? 5 : null
+  const FIRST_PAGE_ID = logo ? 6 : 5
 
-  const objects = [
-    "<< /Type /Catalog /Pages 2 0 R >>",
-    `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`,
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>",
-    "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>",
+  const pageObjectIds = pages.map((_, i) => FIRST_PAGE_ID + i * 2)
+
+  const pagesDict = `<< /Type /Pages /Kids [${pageObjectIds.map((id) => `${id} 0 R`).join(" ")}] /Count ${pages.length} >>`
+  const xObjectResources = IMAGE_ID ? ` /XObject << /Im1 ${IMAGE_ID} 0 R >>` : ""
+  const contentObjects = pages.map((p) => p.commands.join("\n"))
+
+  // Build ordered list of [objectId, objectBody] pairs
+  const entries: Array<[number, string]> = [
+    [CATALOG_ID, "<< /Type /Catalog /Pages 2 0 R >>"],
+    [PAGES_ID, pagesDict],
+    [FONT_REGULAR_ID, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>"],
+    [FONT_BOLD_ID, "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>"],
   ]
 
-  contentObjects.forEach((content, index) => {
-    const pageObjectId = pageObjectIds[index]!
-    const contentObjectId = pageObjectId + 1
-    objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjectId} 0 R >>`,
-    )
-    objects.push(`<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`)
+  if (logo && IMAGE_ID) {
+    const streamStr = logo.streamBuffer.toString("latin1")
+    const decodeParms = logo.decodeParms ? ` /DecodeParms ${logo.decodeParms}` : ""
+    entries.push([
+      IMAGE_ID,
+      `<< /Type /XObject /Subtype /Image /Width ${logo.width} /Height ${logo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /${logo.filter}${decodeParms} /Length ${logo.streamBuffer.length} >>\nstream\n${streamStr}\nendstream`,
+    ])
+  }
+
+  contentObjects.forEach((content, i) => {
+    const pageId = pageObjectIds[i]!
+    const contentId = pageId + 1
+    entries.push([
+      pageId,
+      `<< /Type /Page /Parent ${PAGES_ID} 0 R /MediaBox [0 0 ${PAGE_WIDTH} ${PAGE_HEIGHT}] /Resources << /Font << /F1 ${FONT_REGULAR_ID} 0 R /F2 ${FONT_BOLD_ID} 0 R >>${xObjectResources} >> /Contents ${contentId} 0 R >>`,
+    ])
+    entries.push([
+      contentId,
+      `<< /Length ${Buffer.byteLength(content, "latin1")} >>\nstream\n${content}\nendstream`,
+    ])
   })
 
   const header = "%PDF-1.4\n"
   let body = ""
-  const offsets = [0]
+  const offsets: number[] = []
 
-  for (const [index, object] of objects.entries()) {
+  for (const [, objectBody] of entries) {
     offsets.push(Buffer.byteLength(header + body, "latin1"))
-    body += `${index + 1} 0 obj\n${object}\nendobj\n`
+    const id = entries[offsets.length - 1]![0]
+    body += `${id} 0 obj\n${objectBody}\nendobj\n`
   }
 
+  const totalObjects = entries.length
   const xrefOffset = Buffer.byteLength(header + body, "latin1")
+
   const xref = [
     "xref",
-    `0 ${objects.length + 1}`,
+    `0 ${totalObjects + 1}`,
     "0000000000 65535 f ",
-    ...offsets.slice(1).map((offset) => `${String(offset).padStart(10, "0")} 00000 n `),
+    ...offsets.map((offset) => `${String(offset).padStart(10, "0")} 00000 n `),
     "trailer",
-    `<< /Size ${objects.length + 1} /Root 1 0 R >>`,
+    `<< /Size ${totalObjects + 1} /Root ${CATALOG_ID} 0 R >>`,
     "startxref",
     String(xrefOffset),
     "%%EOF",

@@ -32,9 +32,9 @@ export const mockStudents: Student[] = [
 ]
 
 export const mockSubjects: Subject[] = [
-  { id: "subject-lengua", name: "Lengua", type: "ESPANOL", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
-  { id: "subject-matematica", name: "Matematica", type: "ESPANOL", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
-  { id: "subject-ingles", name: "Ingles", type: "INGLES", gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-lengua", name: "Lengua", type: "ESPANOL", entryKind: "ACADEMIC", hasNumericGrade: false, gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-matematica", name: "Matematica", type: "ESPANOL", entryKind: "ACADEMIC", hasNumericGrade: true, gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
+  { id: "subject-ingles", name: "Ingles", type: "INGLES", entryKind: "ACADEMIC", hasNumericGrade: false, gradeRange: ["1", "2", "3", "4", "5", "6"], active: true },
 ]
 
 export const mockCriteria: EvaluationCriterion[] = [

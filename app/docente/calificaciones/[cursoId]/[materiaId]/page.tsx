@@ -5,6 +5,7 @@ import { useSearchParams } from "next/navigation"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
 import { GradeBadge } from "@/components/grade-badge"
 import { PageHeader } from "@/components/page-header"
@@ -15,12 +16,6 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion"
 import {
   Alert,
   AlertDescription,
@@ -63,11 +58,19 @@ function buildInitialGrades(
   return initial
 }
 
-function buildInitialObservations(evaluations: Evaluation[]) {
+function buildInitialSpecialValues(evaluations: Evaluation[]) {
   return Object.fromEntries(
     evaluations
-      .filter((evaluation) => evaluation.studentObservation)
-      .map((evaluation) => [evaluation.studentId, evaluation.studentObservation ?? ""]),
+      .filter((evaluation) => evaluation.specialValue || evaluation.observation)
+      .map((evaluation) => [evaluation.studentId, evaluation.specialValue ?? evaluation.observation ?? ""]),
+  )
+}
+
+function buildInitialNumericGrades(evaluations: Evaluation[]) {
+  return Object.fromEntries(
+    evaluations
+      .filter((evaluation) => typeof evaluation.numericGrade === "number")
+      .map((evaluation) => [evaluation.studentId, String(evaluation.numericGrade)]),
   )
 }
 
@@ -92,6 +95,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
   const { data, isLoading } = usePlatformData()
   const course = data.courses.find(item => item.id === cursoId)
   const subject = data.subjects.find(item => item.id === materiaId)
+  const entryKind = subject?.entryKind ?? "ACADEMIC"
   const activePeriod = requestedPeriodId
     ? data.periods.find(period => period.id === requestedPeriodId)
     : data.periods.find(period => period.status === "Activo") ?? data.periods[0]
@@ -139,7 +143,8 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     return buildInitialGrades(students, criteria, existingEvaluations)
   })
 
-  const [observations, setObservations] = useState<Record<string, string>>({})
+  const [specialValues, setSpecialValues] = useState<Record<string, string>>({})
+  const [numericGrades, setNumericGrades] = useState<Record<string, string>>({})
   const [generalObservation, setGeneralObservation] = useState("")
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [isDirty, setIsDirty] = useState(false)
@@ -153,7 +158,8 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
 
   useEffect(() => {
     setGrades(buildInitialGrades(students, criteria, existingEvaluations))
-    setObservations(buildInitialObservations(existingEvaluations))
+    setSpecialValues(buildInitialSpecialValues(existingEvaluations))
+    setNumericGrades(buildInitialNumericGrades(existingEvaluations))
     setGeneralObservation(existingEvaluations.find((evaluation) => evaluation.observation)?.observation ?? "")
     setIsDirty(false)
     setAutoSaveBlocked(false)
@@ -187,7 +193,12 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
       periodId: activePeriod.id,
       generalObservation,
       submit,
-      observations,
+      specialValues,
+      numericGrades: Object.fromEntries(
+        Object.entries(numericGrades)
+          .filter(([, value]) => value.trim())
+          .map(([studentId, value]) => [studentId, Number(value)]),
+      ),
       grades: Object.entries(grades).flatMap(([studentId, studentGrades]) =>
         Object.entries(studentGrades)
           .filter(([, grade]) => Boolean(grade))
@@ -218,13 +229,22 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     setIsDirty(false)
     setAutoSaveBlocked(false)
     return true
-  }, [activePeriod, canEdit, cursoId, generalObservation, grades, materiaId, observations, setAutoSaveBlocked, setIsDirty])
+  }, [activePeriod, canEdit, cursoId, generalObservation, grades, materiaId, numericGrades, setAutoSaveBlocked, setIsDirty, specialValues])
 
   // Calculate completion stats (must be before the auto-save effect that reads isComplete)
-  const totalCells = students.length * criteria.length
-  const filledCells = Object.values(grades).reduce((acc, studentGrades) => {
-    return acc + Object.values(studentGrades).filter(g => g && g !== "No evaluado").length
-  }, 0)
+  const totalCells =
+    entryKind === "ACADEMIC"
+      ? students.length * (criteria.length + (subject?.hasNumericGrade ? 1 : 0))
+      : students.length
+  const filledCells =
+    entryKind === "ACADEMIC"
+      ? Object.values(grades).reduce((acc, studentGrades) => {
+          return acc + Object.values(studentGrades).filter(g => g && g !== "No evaluado").length
+        }, 0) +
+        (subject?.hasNumericGrade
+          ? students.filter((student) => (numericGrades[student.id] ?? "").trim()).length
+          : 0)
+      : students.filter((student) => (specialValues[student.id] ?? "").trim()).length
   const completionPercentage = totalCells > 0 ? Math.round((filledCells / totalCells) * 100) : 0
   const isComplete = completionPercentage === 100
 
@@ -290,7 +310,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
         </Alert>
       )}
 
-      {/* Grade Grid */}
+      {entryKind === "ACADEMIC" ? (
       <Card className="min-w-0">
         <CardHeader>
           <CardTitle>Calificaciones por alumno</CardTitle>
@@ -342,6 +362,31 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                       </div>
                     )
                   })}
+                  {subject.hasNumericGrade && (
+                    <div className="space-y-1.5">
+                      <p className="text-sm text-muted-foreground">Nota</p>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={10}
+                        step={1}
+                        inputMode="numeric"
+                        value={numericGrades[student.id] ?? ""}
+                        disabled={!canEdit}
+                        onChange={(event) => {
+                          const value = event.target.value
+                          setNumericGrades(prev => ({
+                            ...prev,
+                            [student.id]: value,
+                          }))
+                          setIsDirty(true)
+                          setAutoSaveBlocked(false)
+                        }}
+                        className="h-9"
+                        placeholder="1-10"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             ))}
@@ -370,6 +415,11 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                       </div>
                     </th>
                   ))}
+                  {subject.hasNumericGrade && (
+                    <th className="border-b px-4 py-3 text-center text-sm font-medium text-muted-foreground min-w-[120px]">
+                      Nota
+                    </th>
+                  )}
                 </tr>
               </thead>
               <tbody>
@@ -409,6 +459,30 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                         </td>
                       )
                     })}
+                    {subject.hasNumericGrade && (
+                      <td className="border-b px-2 py-2">
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          inputMode="numeric"
+                          value={numericGrades[student.id] ?? ""}
+                          disabled={!canEdit}
+                          onChange={(event) => {
+                            const value = event.target.value
+                            setNumericGrades(prev => ({
+                              ...prev,
+                              [student.id]: value,
+                            }))
+                            setIsDirty(true)
+                            setAutoSaveBlocked(false)
+                          }}
+                          className="h-9 text-center"
+                          placeholder="1-10"
+                        />
+                      </td>
+                    )}
                   </tr>
                 ))}
               </tbody>
@@ -416,50 +490,44 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
           </div>
         </CardContent>
       </Card>
-
-      {/* Per-Student Observations */}
+      ) : (
       <Card>
         <CardHeader>
-          <CardTitle>Observaciones por alumno</CardTitle>
+          <CardTitle>{entryKind === "ABSENCES" ? "Inasistencias por alumno" : "Observación del docente"}</CardTitle>
           <CardDescription>
-            Agrega observaciones individuales para cada alumno (opcional)
+            {entryKind === "ABSENCES"
+              ? "Carga las inasistencias del periodo para cada alumno."
+              : "Carga una observación individual por alumno. No se muestra en el boletín."}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <Accordion type="multiple" className="w-full">
+          <div className="divide-y rounded-md border">
             {students.map((student) => (
-              <AccordionItem key={student.id} value={student.id}>
-                <AccordionTrigger className="text-sm">
-                  {student.name}
-                  {observations[student.id] && (
-                    <Badge variant="secondary" className="ml-2">
-                      Con observacion
-                    </Badge>
-                  )}
-                </AccordionTrigger>
-                <AccordionContent>
-                  <Textarea
-                    placeholder={`Observaciones sobre ${student.name}...`}
-                    value={observations[student.id] || ""}
-                    onChange={(e) => {
-                      setObservations(prev => ({
-                        ...prev,
-                        [student.id]: e.target.value
-                      }))
-                      setIsDirty(true)
-                      setAutoSaveBlocked(false)
-                    }}
-                    disabled={!canEdit}
-                    className="min-h-[100px]"
-                  />
-                </AccordionContent>
-              </AccordionItem>
+              <div key={student.id} className="grid gap-2 p-3 md:grid-cols-[220px_1fr] md:items-start">
+                <div className="text-sm font-medium">{student.name}</div>
+                <Textarea
+                  placeholder={entryKind === "ABSENCES" ? "Ej: 0" : `Observación sobre ${student.name}...`}
+                  value={specialValues[student.id] || ""}
+                  onChange={(e) => {
+                    setSpecialValues(prev => ({
+                      ...prev,
+                      [student.id]: e.target.value
+                    }))
+                    setIsDirty(true)
+                    setAutoSaveBlocked(false)
+                  }}
+                  disabled={!canEdit}
+                  className={entryKind === "ABSENCES" ? "min-h-[42px]" : "min-h-[90px]"}
+                />
+              </div>
             ))}
-          </Accordion>
+          </div>
         </CardContent>
       </Card>
+      )}
 
       {/* General Observation */}
+      {entryKind === "ACADEMIC" && (
       <Card>
         <CardHeader>
           <CardTitle>Observacion general del docente</CardTitle>
@@ -481,6 +549,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
           />
         </CardContent>
       </Card>
+      )}
 
       {/* Spacer so sticky action bar doesn't occlude the last rows */}
       <div className="h-20 lg:h-16 shrink-0" aria-hidden />

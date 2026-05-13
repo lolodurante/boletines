@@ -11,6 +11,8 @@ export const evaluationSchema = z.object({
   periodId: idSchema,
   status: evaluationStatusSchema,
   generalObservation: z.string().optional(),
+  specialValue: z.string().optional(),
+  numericGrade: z.number().int().min(1).max(10).optional(),
   submittedAt: isoDateSchema.optional(),
 })
 

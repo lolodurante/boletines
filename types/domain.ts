@@ -13,6 +13,7 @@ export type ReportCardStatus =
 export type ReportDeliveryStatus = "PENDING" | "SENT" | "FAILED" | "BLOCKED"
 export type ReportCardPdfStatus = "PENDING" | "GENERATED" | "FAILED" | "SKIPPED"
 export type ReportCardType = "ESPANOL" | "INGLES"
+export type SubjectEntryKind = "ACADEMIC" | "TEACHER_OBSERVATION" | "ABSENCES"
 
 export interface User {
   id: string
@@ -43,6 +44,8 @@ export interface Subject {
   id: string
   name: string
   type: ReportCardType
+  entryKind: SubjectEntryKind
+  hasNumericGrade: boolean
   gradeRange: string[]
   active: boolean
 }
@@ -99,6 +102,8 @@ export interface Evaluation {
   periodId: string
   status: EvaluationStatus
   generalObservation?: string
+  specialValue?: string
+  numericGrade?: number
   submittedAt?: Date
 }
 
