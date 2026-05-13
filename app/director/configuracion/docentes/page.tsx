@@ -32,16 +32,22 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog"
-import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert"
 import { Checkbox } from "@/components/ui/checkbox"
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
 import {
   Plus,
   Trash2,
   Database,
-  Info,
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
@@ -199,17 +205,10 @@ export default function DocentesPage() {
         ]}
       />
 
-      <Alert className="border-accent/50 bg-accent/5">
-        <Info className="size-4 text-accent" />
-        <AlertDescription className="flex flex-col gap-2 sm:flex-row sm:items-center">
-          Los datos de docentes, alumnos y asignaciones se administran desde la base de datos de la app.
-        </AlertDescription>
-      </Alert>
-
       {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {error}
+        </div>
       )}
 
       <div className="grid grid-cols-1 gap-6 lg:h-[calc(100dvh-260px)] lg:min-h-[520px] lg:grid-cols-[minmax(280px,360px)_minmax(0,1fr)]">
@@ -284,12 +283,48 @@ export default function DocentesPage() {
                     </div>
                   </div>
                   <div className="flex flex-col gap-2 sm:flex-row">
-                    <Button variant="outline" size="sm" onClick={handleInviteTeacher}>
-                      Invitar
-                    </Button>
-                    <Button variant="outline" size="sm" onClick={handleDisableTeacherAccess}>
-                      Desactivar acceso
-                    </Button>
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">Invitar</Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>Enviar invitación</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            Se enviará un email de invitación a <strong>{selectedTeacher.email}</strong> para que acceda al sistema como docente.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction onClick={handleInviteTeacher}>
+                            Enviar invitación
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
+
+                    <AlertDialog>
+                      <AlertDialogTrigger asChild>
+                        <Button variant="outline" size="sm">Desactivar acceso</Button>
+                      </AlertDialogTrigger>
+                      <AlertDialogContent>
+                        <AlertDialogHeader>
+                          <AlertDialogTitle>¿Desactivar acceso de {selectedTeacher.name}?</AlertDialogTitle>
+                          <AlertDialogDescription>
+                            El docente no podrá iniciar sesión ni cargar calificaciones. Sus datos y asignaciones se conservan.
+                          </AlertDialogDescription>
+                        </AlertDialogHeader>
+                        <AlertDialogFooter>
+                          <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                          <AlertDialogAction
+                            onClick={handleDisableTeacherAccess}
+                            className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+                          >
+                            Desactivar acceso
+                          </AlertDialogAction>
+                        </AlertDialogFooter>
+                      </AlertDialogContent>
+                    </AlertDialog>
                   </div>
                 </div>
               </CardHeader>

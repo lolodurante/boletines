@@ -18,18 +18,36 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog"
 import {
-  Alert,
-  AlertDescription,
-} from "@/components/ui/alert"
-import { 
-  Plus, 
-  Pencil, 
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@/components/ui/alert-dialog"
+import {
+  Plus,
+  Pencil,
   Archive,
-  Info
 } from "lucide-react"
 import { toast } from "sonner"
 import { usePlatformData } from "@/lib/use-platform-data"
 import type { Period, PeriodStatus } from "@/lib/data"
+
+function toInputDate(ddmmyyyy: string): string {
+  const [d, m, y] = ddmmyyyy.split("/")
+  if (!d || !m || !y) return ""
+  return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`
+}
+
+function fromInputDate(yyyymmdd: string): string {
+  const [y, m, d] = yyyymmdd.split("-")
+  if (!d || !m || !y) return ""
+  return `${d}/${m}/${y}`
+}
 
 export default function PeriodosPage() {
   const { data } = usePlatformData()
@@ -52,9 +70,9 @@ export default function PeriodosPage() {
     if (period) {
       setEditingPeriod(period)
       setFormName(period.name)
-      setFormStartDate(period.startDate)
-      setFormEndDate(period.endDate)
-      setFormDeadline(period.teacherDeadline)
+      setFormStartDate(toInputDate(period.startDate))
+      setFormEndDate(toInputDate(period.endDate))
+      setFormDeadline(toInputDate(period.teacherDeadline))
       setFormIsActive(period.status === "Activo")
     } else {
       setEditingPeriod(null)
@@ -85,9 +103,9 @@ export default function PeriodosPage() {
         action: "save",
         id: editingPeriod?.id,
         name: formName,
-        startDate: formStartDate,
-        endDate: formEndDate,
-        teacherDeadline: formDeadline,
+        startDate: fromInputDate(formStartDate),
+        endDate: fromInputDate(formEndDate),
+        teacherDeadline: fromInputDate(formDeadline),
         active: formIsActive,
       }),
     })
@@ -100,10 +118,14 @@ export default function PeriodosPage() {
 
     const result = (await response.json().catch(() => null)) as { id?: string } | null
 
+    const displayStart = fromInputDate(formStartDate)
+    const displayEnd = fromInputDate(formEndDate)
+    const displayDeadline = fromInputDate(formDeadline)
+
     if (editingPeriod) {
-      setPeriods(periods.map(p => 
-        p.id === editingPeriod.id 
-          ? { ...p, name: formName, startDate: formStartDate, endDate: formEndDate, teacherDeadline: formDeadline, status }
+      setPeriods(periods.map(p =>
+        p.id === editingPeriod.id
+          ? { ...p, name: formName, startDate: displayStart, endDate: displayEnd, teacherDeadline: displayDeadline, status }
           : formIsActive && p.status === "Activo" ? { ...p, status: "Cerrado" as PeriodStatus } : p
       ))
       toast.success("Periodo actualizado")
@@ -111,9 +133,9 @@ export default function PeriodosPage() {
       const newPeriod: Period = {
         id: result?.id || `p${Date.now()}`,
         name: formName,
-        startDate: formStartDate,
-        endDate: formEndDate,
-        teacherDeadline: formDeadline,
+        startDate: displayStart,
+        endDate: displayEnd,
+        teacherDeadline: displayDeadline,
         status
       }
       
@@ -204,28 +226,31 @@ export default function PeriodosPage() {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Fecha de inicio</label>
-                    <Input
-                      placeholder="DD/MM/AAAA"
+                    <input
+                      type="date"
                       value={formStartDate}
                       onChange={(e) => setFormStartDate(e.target.value)}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
                   </div>
                   <div className="space-y-2">
                     <label className="text-sm font-medium">Fecha de fin</label>
-                    <Input
-                      placeholder="DD/MM/AAAA"
+                    <input
+                      type="date"
                       value={formEndDate}
                       onChange={(e) => setFormEndDate(e.target.value)}
+                      className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
                   </div>
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm font-medium">Fecha limite para docentes</label>
-                  <Input
-                    placeholder="DD/MM/AAAA"
+                  <label className="text-sm font-medium">Fecha límite para docentes</label>
+                  <input
+                    type="date"
                     value={formDeadline}
                     onChange={(e) => setFormDeadline(e.target.value)}
+                    className="flex h-9 w-full rounded-md border border-input bg-background px-3 py-1 text-sm shadow-sm transition-colors focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                   />
                 </div>
 
@@ -233,7 +258,9 @@ export default function PeriodosPage() {
                   <div>
                     <p className="font-medium text-sm">Activar como periodo en curso</p>
                     <p className="text-xs text-muted-foreground">
-                      Solo puede haber un periodo activo a la vez
+                      {formIsActive && periods.some(p => p.status === "Activo" && p.id !== editingPeriod?.id)
+                        ? "⚠️ Esto cerrará el período activo actual"
+                        : "Solo puede haber un periodo activo a la vez"}
                     </p>
                   </div>
                   <Switch
@@ -255,14 +282,6 @@ export default function PeriodosPage() {
           </Dialog>
         }
       />
-
-      {/* Info Alert */}
-      <Alert>
-        <Info className="size-4" />
-        <AlertDescription>
-          Los periodos se toman de la configuracion guardada. Podes crear, activar o cerrar periodos desde esta pantalla.
-        </AlertDescription>
-      </Alert>
 
       {/* Period Cards */}
       <div className="grid gap-4">
@@ -304,10 +323,28 @@ export default function PeriodosPage() {
                 Editar
               </Button>
               {period.status !== "Cerrado" && (
-                <Button variant="outline" size="sm" onClick={() => handleArchive(period.id)}>
-                  <Archive className="size-4 mr-2" />
-                  Archivar
-                </Button>
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="outline" size="sm">
+                      <Archive className="size-4 mr-2" />
+                      Archivar
+                    </Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>¿Archivar &quot;{period.name}&quot;?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        El período quedará cerrado. Los docentes ya no podrán cargar evaluaciones en él.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancelar</AlertDialogCancel>
+                      <AlertDialogAction onClick={() => handleArchive(period.id)}>
+                        Archivar
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
               )}
             </CardFooter>
           </Card>
