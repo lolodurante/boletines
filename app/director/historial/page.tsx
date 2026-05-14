@@ -44,7 +44,8 @@ interface HistorialRow {
   periodName: string
   generatedDate: string | null
   status: ReportStatus
-  pdfUrl?: string
+  hasPdf: boolean
+  pdfDownloadUrl?: string
 }
 
 function getReportTypeLabel(reportType: HistorialRow["reportType"]) {
@@ -224,9 +225,9 @@ export default function HistorialPage() {
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2">
-                      {row.pdfUrl ? (
+                      {row.hasPdf ? (
                         <Button variant="outline" size="sm" asChild>
-                          <Link href={row.pdfUrl} target="_blank" rel="noreferrer">
+                          <Link href={row.pdfDownloadUrl ?? `/api/report-cards/${row.id}/pdf`} target="_blank" rel="noreferrer">
                             <Eye className="size-4 mr-1.5" />
                             Ver PDF
                           </Link>

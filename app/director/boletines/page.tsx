@@ -59,7 +59,8 @@ interface ReportCardData {
   status: "No listo" | "Listo para revisión" | "PDF generado" | "Requiere revisión"
   parentEmail: string | null
   directorObservation?: string
-  pdfUrl?: string
+  hasPdf: boolean
+  pdfDownloadUrl?: string
   grades: Array<{
     subjectName: string
     teacherId: string
@@ -137,7 +138,7 @@ export default function BoletinesPage() {
     }
   }, [dynamicReportCardsData, searchParams, selectedReportId])
 
-  const updateSelectedReport = (status: ReportCardData["status"], pdfUrl?: string) => {
+  const updateSelectedReport = (status: ReportCardData["status"], pdfDownloadUrl?: string) => {
     if (!selectedReport) return
 
     setReportCards((current) =>
@@ -148,7 +149,8 @@ export default function BoletinesPage() {
               status,
               completedDate: report.completedDate,
               directorObservation,
-              pdfUrl: pdfUrl ?? report.pdfUrl,
+              hasPdf: status === "PDF generado" ? true : report.hasPdf,
+              pdfDownloadUrl: pdfDownloadUrl ?? report.pdfDownloadUrl,
             }
           : report,
       ),
@@ -173,15 +175,14 @@ export default function BoletinesPage() {
       return
     }
 
-    const result = (await response.json().catch(() => null)) as { pdfUrl?: string } | null
-    updateSelectedReport("PDF generado", result?.pdfUrl)
+    const result = (await response.json().catch(() => null)) as { pdfDownloadUrl?: string } | null
+    const pdfDownloadUrl = result?.pdfDownloadUrl ?? `/api/report-cards/${selectedReport.id}/pdf`
+    updateSelectedReport("PDF generado", pdfDownloadUrl)
 
-    if (result?.pdfUrl) {
-      const link = document.createElement("a")
-      link.href = result.pdfUrl
-      link.download = `boletin-${getReportTypeLabel(selectedReport.reportType).toLowerCase()}-${selectedReport.studentName.replace(/,\s*/g, "-").replace(/\s+/g, "-").toLowerCase()}.pdf`
-      link.click()
-    }
+    const link = document.createElement("a")
+    link.href = pdfDownloadUrl
+    link.download = `boletin-${getReportTypeLabel(selectedReport.reportType).toLowerCase()}-${selectedReport.studentName.replace(/,\s*/g, "-").replace(/\s+/g, "-").toLowerCase()}.pdf`
+    link.click()
 
     toast.success("PDF generado y descargado")
   }
@@ -454,9 +455,9 @@ export default function BoletinesPage() {
 
               {/* Actions */}
               <div className="flex flex-col gap-2 border-t p-4 sm:flex-row sm:items-center sm:justify-end">
-                {selectedReport.pdfUrl ? (
+                {selectedReport.hasPdf ? (
                   <Button variant="ghost" size="sm" asChild>
-                    <Link href={selectedReport.pdfUrl} target="_blank" rel="noreferrer">
+                    <Link href={selectedReport.pdfDownloadUrl ?? `/api/report-cards/${selectedReport.id}/pdf`} target="_blank" rel="noreferrer">
                       <FileText className="size-4 mr-2" />
                       Ver PDF
                     </Link>

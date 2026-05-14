@@ -280,6 +280,8 @@ model CourseAssignment {
   @@index([subjectId])
   @@index([periodId])
   @@index([grade, division])
+  @@index([periodId, grade, division], map: "course_assignments_period_course_idx")
+  @@index([periodId, grade, division, subjectId], map: "course_assignments_period_course_subject_idx")
   @@map("course_assignments")
 }
 
@@ -310,6 +312,8 @@ model Evaluation {
   @@index([subjectId])
   @@index([periodId])
   @@index([status])
+  @@index([periodId, studentId, status], map: "evaluations_period_student_status_idx")
+  @@index([periodId, teacherId, subjectId], map: "evaluations_period_teacher_subject_idx")
   @@map("evaluations")
 }
 
@@ -375,6 +379,7 @@ model ReportCard {
   @@index([type])
   @@index([status])
   @@index([pdfStatus])
+  @@index([status, periodId, type], map: "report_cards_status_period_type_idx")
   @@map("report_cards")
 }
 

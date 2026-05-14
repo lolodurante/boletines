@@ -202,7 +202,12 @@ export async function POST(request: Request) {
       },
     })
 
-    return NextResponse.json({ ok: true, persisted: true, status: "PDF generado", pdfUrl: pdf.url })
+    return NextResponse.json({
+      ok: true,
+      persisted: true,
+      status: "PDF generado",
+      pdfDownloadUrl: `/api/report-cards/${reportCard.id}/pdf`,
+    })
   } catch (error) {
     logWarning("Could not update report card", {
       reason: error instanceof Error ? error.message : "Unknown report card action error",

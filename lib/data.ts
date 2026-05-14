@@ -88,6 +88,8 @@ export interface ReportCard {
   generatedDate?: string
   completedDate: string
   directorObservation?: string
+  hasPdf?: boolean
+  pdfDownloadUrl?: string
   pdfUrl?: string
 }
 

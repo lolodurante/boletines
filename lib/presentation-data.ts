@@ -48,7 +48,8 @@ export interface DirectorReportCardData {
   status: ReportStatus
   parentEmail: string | null
   directorObservation?: string
-  pdfUrl?: string
+  hasPdf: boolean
+  pdfDownloadUrl?: string
   grades: Array<{
     subjectName: string
     teacherId: string
@@ -69,7 +70,8 @@ export interface ReportHistoryRow {
   periodName: string
   generatedDate: string | null
   status: ReportStatus
-  pdfUrl?: string
+  hasPdf: boolean
+  pdfDownloadUrl?: string
 }
 
 export interface TeacherPerformanceRow {
@@ -165,7 +167,8 @@ function buildDirectorReportCards(): DirectorReportCardData[] {
       completedDate: reportCard.completedDate,
       status: reportCard.status,
       parentEmail: student?.parentEmail ?? null,
-      pdfUrl: reportCard.pdfUrl,
+      hasPdf: Boolean(reportCard.pdfUrl),
+      pdfDownloadUrl: reportCard.pdfUrl ? reportCard.pdfDownloadUrl : undefined,
       grades: printableEvaluations.map((evaluation) => ({
         subjectName: getSubjectById(evaluation.subjectId)?.name ?? "—",
         teacherId: evaluation.teacherId,
@@ -189,7 +192,8 @@ function buildReportHistory(): ReportHistoryRow[] {
     periodName: periods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
     generatedDate: reportCard.generatedDate ?? null,
     status: reportCard.status,
-    pdfUrl: reportCard.pdfUrl,
+    hasPdf: Boolean(reportCard.pdfUrl),
+    pdfDownloadUrl: reportCard.pdfUrl ? reportCard.pdfDownloadUrl : undefined,
   }))
 }
 

@@ -27,7 +27,19 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       }),
       prisma.academicPeriod.findMany({ orderBy: { startDate: "asc" } }),
       prisma.courseAssignment.findMany({ orderBy: [{ grade: "asc" }, { division: "asc" }] }),
-      prisma.reportCard.findMany({ include: { student: true, period: true }, orderBy: { updatedAt: "desc" } }),
+      prisma.reportCard.findMany({
+        select: {
+          id: true,
+          studentId: true,
+          periodId: true,
+          type: true,
+          status: true,
+          directorObservation: true,
+          pdfStatus: true,
+          updatedAt: true,
+        },
+        orderBy: { updatedAt: "desc" },
+      }),
       prisma.evaluation.findMany({
         include: {
           student: true,
@@ -132,9 +144,10 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       reportType: reportCard.type,
       status: mapReportStatus(reportCard.status),
       completedDate: reportCard.updatedAt.toLocaleDateString("es-AR"),
-      generatedDate: reportCard.pdfUrl ? reportCard.updatedAt.toLocaleDateString("es-AR") : undefined,
+      generatedDate: reportCard.pdfStatus === "GENERATED" ? reportCard.updatedAt.toLocaleDateString("es-AR") : undefined,
       directorObservation: reportCard.directorObservation ?? undefined,
-      pdfUrl: reportCard.pdfUrl ?? undefined,
+      hasPdf: reportCard.pdfStatus === "GENERATED",
+      pdfDownloadUrl: reportCard.pdfStatus === "GENERATED" ? `/api/report-cards/${reportCard.id}/pdf` : undefined,
     }))
     const mapEvaluationStatus = (status: string): EvaluationStatus => {
       if (status === "APPROVED" || status === "SUBMITTED") return "Completo"
@@ -198,7 +211,8 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         status: reportCard.status,
         parentEmail: student?.parentEmail ?? null,
         directorObservation: reportCard.directorObservation ?? undefined,
-        pdfUrl: reportCard.pdfUrl,
+        hasPdf: reportCard.hasPdf ?? false,
+        pdfDownloadUrl: reportCard.pdfDownloadUrl,
         grades: printableEvaluations.map((evaluation) => ({
           subjectName: mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.name ?? "—",
           teacherId: evaluation.teacherId,
@@ -221,7 +235,8 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
         periodName: mappedPeriods.find((period) => period.id === reportCard.periodId)?.name ?? "—",
         generatedDate: reportCard.generatedDate ?? null,
         status: reportCard.status,
-        pdfUrl: reportCard.pdfUrl,
+        hasPdf: reportCard.hasPdf ?? false,
+        pdfDownloadUrl: reportCard.pdfDownloadUrl,
       }
     })
     const activePeriodRecord = periods.find((period) => period.status === "ACTIVE") ?? periods[0]
