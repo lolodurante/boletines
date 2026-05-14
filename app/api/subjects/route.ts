@@ -172,6 +172,13 @@ export async function POST(request: Request) {
               })
 
           const activeCriterionIds: string[] = []
+          const newCriteria: Array<{
+            subjectId: string
+            name: string
+            description: string
+            gradeRange: string[]
+            active: boolean
+          }> = []
 
           for (const criterion of subject.criteria) {
             const data = {
@@ -181,16 +188,17 @@ export async function POST(request: Request) {
               gradeRange: criterion.gradeRange,
               active: true,
             }
-            const savedCriterion = isUuid(criterion.id)
-              ? await tx.evaluationCriterion.upsert({
+            if (isUuid(criterion.id)) {
+              const savedCriterion = await tx.evaluationCriterion.upsert({
                   where: { id: criterion.id },
                   create: data,
                   update: data,
                   select: { id: true },
                 })
-              : await tx.evaluationCriterion.create({ data, select: { id: true } })
-
-            activeCriterionIds.push(savedCriterion.id)
+              activeCriterionIds.push(savedCriterion.id)
+            } else {
+              newCriteria.push(data)
+            }
           }
 
           await tx.evaluationCriterion.updateMany({
@@ -200,6 +208,10 @@ export async function POST(request: Request) {
             },
             data: { active: false },
           })
+
+          if (newCriteria.length > 0) {
+            await tx.evaluationCriterion.createMany({ data: newCriteria })
+          }
         }
       },
       { timeout: SUBJECTS_SAVE_TRANSACTION_TIMEOUT_MS },

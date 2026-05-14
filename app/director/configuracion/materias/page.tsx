@@ -206,6 +206,7 @@ export default function MateriasPage() {
   const [newCriterionName, setNewCriterionName] = useState("")
   const [newSubjectName, setNewSubjectName] = useState("")
   const [hasChanges, setHasChanges] = useState(false)
+  const [dirtySubjectIds, setDirtySubjectIds] = useState<Set<string>>(() => new Set())
   const [isSaving, setIsSaving] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
 
@@ -225,6 +226,15 @@ export default function MateriasPage() {
   const isShared = selectedSubject?.sharedCriteria !== false
   const sharedCriteria = selectedSubject ? getSharedCriteria(selectedSubject) : []
 
+  const markSubjectDirty = (subjectId: string) => {
+    setDirtySubjectIds((current) => {
+      const next = new Set(current)
+      next.add(subjectId)
+      return next
+    })
+    setHasChanges(true)
+  }
+
   // ── subject list actions ──────────────────────────────────────────────────
 
   const handleAddSubject = () => {
@@ -243,7 +253,7 @@ export default function MateriasPage() {
     setSubjects((prev) => [...prev, newSubject])
     setSelectedSubjectId(newSubject.id)
     setNewSubjectName("")
-    setHasChanges(true)
+    markSubjectDirty(newSubject.id)
     setShowDetail(true)
     toast.success("Materia creada")
   }
@@ -270,7 +280,10 @@ export default function MateriasPage() {
     setSubjects(filtered)
     setSelectedSubjectId(filtered[0]?.id)
     if (filtered.length === 0) setShowDetail(false)
-    if (!isUuid) setHasChanges(true)
+    const nextDirtySubjectIds = new Set(dirtySubjectIds)
+    nextDirtySubjectIds.delete(selectedSubject.id)
+    setDirtySubjectIds(nextDirtySubjectIds)
+    setHasChanges(nextDirtySubjectIds.size > 0)
     await reload()
     toast.success(`"${subjectName}" eliminada`)
   }
@@ -280,7 +293,7 @@ export default function MateriasPage() {
   const updateSubject = (patch: Partial<Subject>) => {
     if (!selectedSubject) return
     setSubjects((prev) => prev.map((s) => (s.id === selectedSubject.id ? { ...s, ...patch } : s)))
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleUpdateEntryKind = (entryKind: NonNullable<Subject["entryKind"]>) => {
@@ -330,7 +343,7 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   // ── shared criteria actions ───────────────────────────────────────────────
@@ -347,7 +360,7 @@ export default function MateriasPage() {
       ),
     )
     setNewCriterionName("")
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleRemoveSharedCriterion = (id: string) => {
@@ -359,7 +372,7 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleUpdateSharedCriterion = (id: string, field: "name" | "description", value: string) => {
@@ -377,7 +390,7 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   // ── per-grade criteria actions ────────────────────────────────────────────
@@ -399,7 +412,7 @@ export default function MateriasPage() {
       ),
     )
     setNewCriterionName("")
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleRemoveCriterionFromGrade = (grade: string, id: string) => {
@@ -416,7 +429,7 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleUpdateCriterionInGrade = (grade: string, id: string, field: "name" | "description", value: string) => {
@@ -435,7 +448,7 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   // ── shared ↔ per-grade toggle ─────────────────────────────────────────────
@@ -451,7 +464,7 @@ export default function MateriasPage() {
       ),
     )
     setSelectedGrade(selectedSubject.appliesTo[0] ?? GRADES[0]!)
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   const handleCollapseToShared = () => {
@@ -465,17 +478,20 @@ export default function MateriasPage() {
           : s,
       ),
     )
-    setHasChanges(true)
+    markSubjectDirty(selectedSubject.id)
   }
 
   // ── save ──────────────────────────────────────────────────────────────────
 
   const handleSave = async () => {
+    const subjectsToSave = subjects.filter((subject) => dirtySubjectIds.has(subject.id))
+    if (subjectsToSave.length === 0) return
+
     setIsSaving(true)
     const response = await fetch("/api/subjects", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ subjects }),
+      body: JSON.stringify({ subjects: subjectsToSave }),
     })
     setIsSaving(false)
 
@@ -486,6 +502,7 @@ export default function MateriasPage() {
     }
 
     await reload()
+    setDirtySubjectIds(new Set())
     setHasChanges(false)
     toast.success("Cambios guardados")
   }
