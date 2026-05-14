@@ -14,6 +14,7 @@ export default async function LoginPage({
     const user = await getCurrentAuthUser()
     if (user?.role === "TEACHER") redirect("/docente/dashboard")
     if (user?.role === "DIRECTOR" || user?.role === "ADMIN") redirect("/director/dashboard")
+    if (user?.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
   }
 
   return <LoginForm nextPath={params.next} authEnabled={isSupabaseAuthConfigured()} error={params.error} />

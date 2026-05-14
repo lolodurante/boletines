@@ -61,6 +61,7 @@ const directorNavItems: NavItem[] = [
       { label: "Períodos", href: "/director/configuracion/periodos" },
       { label: "Docentes y asignaciones", href: "/director/configuracion/docentes" },
       { label: "Cursos y alumnos", href: "/director/configuracion/alumnos" },
+      { label: "Usuarios", href: "/director/configuracion/usuarios" },
     ]
   },
 ]
@@ -71,8 +72,12 @@ const teacherNavItems: NavItem[] = [
   { label: "Calificaciones", href: "/docente/calificaciones", icon: ClipboardList },
 ]
 
+const psicopedagogaNavItems: NavItem[] = [
+  { label: "Alumnos", href: "/psicopedagoga/dashboard", icon: GraduationCap },
+]
+
 interface AppSidebarProps {
-  role: "director" | "docente"
+  role: "director" | "docente" | "psicopedagoga"
   userName: string
   userRole: string
 }
@@ -83,7 +88,7 @@ export function AppSidebar({ role, userName, userRole }: AppSidebarProps) {
   const pendingReportCount = data.reportCards.filter(
     (report) => report.status === "Listo para revisión",
   ).length
-  const navItems = role === "director" ? directorNavItems : teacherNavItems
+  const navItems = role === "director" ? directorNavItems : role === "psicopedagoga" ? psicopedagogaNavItems : teacherNavItems
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
   const [isMobileOpen, setIsMobileOpen] = useState(false)
 

@@ -24,17 +24,13 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   }
 
-  if (user.id === auth.user.id) {
-    return NextResponse.json({ error: "No podés desactivar tu propio usuario" }, { status: 400 })
-  }
-
   if (user.role === "ADMIN" && auth.user!.role !== "ADMIN") {
-    return NextResponse.json({ error: "No podés desactivar un administrador" }, { status: 403 })
+    return NextResponse.json({ error: "No podés habilitar un administrador" }, { status: 403 })
   }
 
   await prisma.user.update({
     where: { id: userId },
-    data: { status: "DISABLED" },
+    data: { status: "INVITED" },
   })
 
   return NextResponse.json({ ok: true })

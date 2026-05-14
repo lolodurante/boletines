@@ -11,7 +11,7 @@ export interface CurrentAuthUser extends AuthUser {
   status: "INVITED" | "ACTIVE" | "DISABLED"
 }
 
-function demoUserForRole(role: "DIRECTOR" | "TEACHER" = "DIRECTOR"): CurrentAuthUser {
+function demoUserForRole(role: "DIRECTOR" | "TEACHER" | "PSICOPEDAGOGA" = "DIRECTOR"): CurrentAuthUser {
   const data = getInitialPlatformData()
   if (role === "TEACHER") {
     return {
@@ -20,6 +20,16 @@ function demoUserForRole(role: "DIRECTOR" | "TEACHER" = "DIRECTOR"): CurrentAuth
       role: "TEACHER",
       name: data.currentTeacher.name,
       email: data.currentTeacher.email,
+      status: "ACTIVE",
+    }
+  }
+
+  if (role === "PSICOPEDAGOGA") {
+    return {
+      id: "demo-psicopedagoga",
+      role: "PSICOPEDAGOGA",
+      name: "Demo Psicopedagoga",
+      email: "psicopedagoga@demo.local",
       status: "ACTIVE",
     }
   }
@@ -37,7 +47,7 @@ export function authFallbackEnabled() {
   return process.env.NODE_ENV !== "production" && !isSupabaseAuthConfigured()
 }
 
-export async function getCurrentAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" }) {
+export async function getCurrentAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" | "PSICOPEDAGOGA" }) {
   if (authFallbackEnabled()) {
     return demoUserForRole(options?.fallbackRole ?? "DIRECTOR")
   }
@@ -75,7 +85,7 @@ export async function getCurrentAuthUser(options?: { fallbackRole?: "DIRECTOR" |
   } satisfies CurrentAuthUser
 }
 
-export async function requireAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" }) {
+export async function requireAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" | "PSICOPEDAGOGA" }) {
   const user = await getCurrentAuthUser(options)
   if (!user) redirect("/login")
   return user
@@ -84,7 +94,9 @@ export async function requireAuthUser(options?: { fallbackRole?: "DIRECTOR" | "T
 export async function requireDirectorOrAdmin() {
   const user = await requireAuthUser({ fallbackRole: "DIRECTOR" })
   if (user.role !== "DIRECTOR" && user.role !== "ADMIN") {
-    redirect(user.role === "TEACHER" ? "/docente/dashboard" : "/login")
+    if (user.role === "TEACHER") redirect("/docente/dashboard")
+    if (user.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
+    redirect("/login")
   }
   return user
 }
@@ -92,12 +104,24 @@ export async function requireDirectorOrAdmin() {
 export async function requireTeacher() {
   const user = await requireAuthUser({ fallbackRole: "TEACHER" })
   if (user.role !== "TEACHER" || !user.teacherId) {
-    redirect(user.role === "DIRECTOR" || user.role === "ADMIN" ? "/director/dashboard" : "/login")
+    if (user.role === "DIRECTOR" || user.role === "ADMIN") redirect("/director/dashboard")
+    if (user.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
+    redirect("/login")
   }
   return user
 }
 
-export async function requireApiAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" }) {
+export async function requirePsicopedagoga() {
+  const user = await requireAuthUser({ fallbackRole: "PSICOPEDAGOGA" })
+  if (user.role !== "PSICOPEDAGOGA") {
+    if (user.role === "DIRECTOR" || user.role === "ADMIN") redirect("/director/dashboard")
+    if (user.role === "TEACHER") redirect("/docente/dashboard")
+    redirect("/login")
+  }
+  return user
+}
+
+export async function requireApiAuthUser(options?: { fallbackRole?: "DIRECTOR" | "TEACHER" | "PSICOPEDAGOGA" }) {
   const user = await getCurrentAuthUser(options)
   if (!user) {
     return { user: null, response: Response.json({ error: "No autorizado" }, { status: 401 }) }
@@ -119,6 +143,15 @@ export async function requireApiTeacher() {
   const { user, response } = await requireApiAuthUser({ fallbackRole: "TEACHER" })
   if (response) return { user: null, response }
   if (user.role !== "TEACHER" || !user.teacherId) {
+    return { user: null, response: Response.json({ error: "No autorizado" }, { status: 403 }) }
+  }
+  return { user, response: null }
+}
+
+export async function requireApiPsicopedagoga() {
+  const { user, response } = await requireApiAuthUser({ fallbackRole: "PSICOPEDAGOGA" })
+  if (response) return { user: null, response }
+  if (user.role !== "PSICOPEDAGOGA") {
     return { user: null, response: Response.json({ error: "No autorizado" }, { status: 403 }) }
   }
   return { user, response: null }

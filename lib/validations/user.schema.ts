@@ -1,7 +1,7 @@
 import { z } from "zod"
 import { idSchema, isoDateSchema, optionalEmailSchema, requiredEmailSchema } from "./common"
 
-export const userRoleSchema = z.enum(["DIRECTOR", "TEACHER", "ADMIN"])
+export const userRoleSchema = z.enum(["DIRECTOR", "TEACHER", "PSICOPEDAGOGA"])
 
 export const userSchema = z.object({
   id: idSchema,

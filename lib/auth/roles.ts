@@ -3,6 +3,7 @@ import type { UserRole } from "@/types/domain"
 export const roles: Record<UserRole, UserRole> = {
   DIRECTOR: "DIRECTOR",
   TEACHER: "TEACHER",
+  PSICOPEDAGOGA: "PSICOPEDAGOGA",
   ADMIN: "ADMIN",
 }
 

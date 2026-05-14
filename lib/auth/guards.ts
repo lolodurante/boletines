@@ -15,6 +15,12 @@ export function requireTeacher(user: AuthUser) {
   }
 }
 
+export function requirePsicopedagoga(user: AuthUser) {
+  if (user.role !== "PSICOPEDAGOGA") {
+    throw new AuthorizationError("Psicopedagoga role required")
+  }
+}
+
 export function assertCanEditEvaluation(user: AuthUser, params: { teacherId: string; assignedStudentIds: string[]; studentId: string }) {
   if (!canEditEvaluation(user, params)) {
     throw new AuthorizationError("Teacher cannot edit this evaluation")

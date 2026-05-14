@@ -50,6 +50,9 @@ function colorForLabel(label: string) {
 }
 
 export async function GET() {
+  const auth = await requireApiDirectorOrAdmin()
+  if (auth.response) return auth.response
+
   if (!hasConfiguredDatabase()) {
     return NextResponse.json({ scales: [], persisted: false })
   }

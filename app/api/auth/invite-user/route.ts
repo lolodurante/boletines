@@ -10,7 +10,7 @@ const inviteSchema = z.union([
   z.object({
     email: z.string().email(),
     name: z.string().min(1),
-    role: z.enum(["TEACHER", "DIRECTOR", "ADMIN"]),
+    role: z.enum(["TEACHER", "DIRECTOR", "PSICOPEDAGOGA"]),
   }),
 ])
 
@@ -48,11 +48,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "No se pudo enviar la invitacion" }, { status: 502 })
     }
   }
-
-  await prisma.user.update({
-    where: { id: user.id },
-    data: { status: "INVITED" },
-  })
 
   return NextResponse.json({ ok: true, status: "invited" })
 }

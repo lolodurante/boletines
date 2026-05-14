@@ -222,7 +222,7 @@ export default function MateriasPage() {
       hasNumericGrade: false,
       appliesTo: [...GRADES],
       criteriaByGrade: GRADES.map((grade) => ({ grade, criteria: [] })),
-      sharedCriteria: true,
+      sharedCriteria: false,
     }
     setSubjects((prev) => [...prev, newSubject])
     setSelectedSubjectId(newSubject.id)

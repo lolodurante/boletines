@@ -1,4 +1,4 @@
-export type UserRole = "DIRECTOR" | "TEACHER" | "ADMIN"
+export type UserRole = "DIRECTOR" | "TEACHER" | "PSICOPEDAGOGA" | "ADMIN"
 export type StudentStatus = "ACTIVE" | "INACTIVE"
 export type AcademicPeriodType = "TRIMESTER" | "BIMESTER" | "QUARTER" | "CUSTOM"
 export type AcademicPeriodStatus = "DRAFT" | "ACTIVE" | "CLOSED"

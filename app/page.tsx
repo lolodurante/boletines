@@ -13,7 +13,9 @@ export default async function HomePage() {
   if (isSupabaseAuthConfigured()) {
     const user = await getCurrentAuthUser()
     if (!user) redirect("/login")
-    redirect(user.role === "TEACHER" ? "/docente/dashboard" : "/director/dashboard")
+    if (user.role === "TEACHER") redirect("/docente/dashboard")
+    if (user.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
+    redirect("/director/dashboard")
   }
 
   const { directorUser, currentTeacher } = getInitialPlatformData()
