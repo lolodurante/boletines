@@ -13,7 +13,13 @@ export async function getCurrentAuthUser() {
   const supabase = await createSupabaseServerClient()
   const { data, error } = await supabase.auth.getUser()
   const authUser = data.user
-  if (error || !authUser?.email) return null
+  if (error) {
+    if (error.code === "refresh_token_not_found" || error.status === 400) {
+      await supabase.auth.signOut()
+    }
+    return null
+  }
+  if (!authUser?.email) return null
 
   const localUser = await prisma.user.findUnique({
     where: { email: authUser.email },
@@ -108,6 +114,15 @@ export async function requireApiPsicopedagoga() {
   const { user, response } = await requireApiAuthUser()
   if (response) return { user: null, response }
   if (user.role !== "PSICOPEDAGOGA") {
+    return { user: null, response: Response.json({ error: "No autorizado" }, { status: 403 }) }
+  }
+  return { user, response: null }
+}
+
+export async function requireApiDirectorOrPsico() {
+  const { user, response } = await requireApiAuthUser()
+  if (response) return { user: null, response }
+  if (user.role !== "DIRECTOR" && user.role !== "ADMIN" && user.role !== "PSICOPEDAGOGA") {
     return { user: null, response: Response.json({ error: "No autorizado" }, { status: 403 }) }
   }
   return { user, response: null }

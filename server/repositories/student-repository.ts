@@ -12,6 +12,19 @@ export async function findStudentsByCourse(input: { grade: string; division: str
       grade: input.grade,
       division: input.division,
       status: "ACTIVE",
+      isAdapted: false,
+    },
+    orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
+  })
+}
+
+export async function findAdaptedStudentsByCourse(input: { grade: string; division: string }) {
+  return prisma.student.findMany({
+    where: {
+      grade: input.grade,
+      division: input.division,
+      status: "ACTIVE",
+      isAdapted: true,
     },
     orderBy: [{ lastName: "asc" }, { firstName: "asc" }],
   })

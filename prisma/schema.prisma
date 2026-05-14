@@ -103,14 +103,17 @@ model Student {
   division    String
   familyEmail String?       @map("family_email")
   status      StudentStatus @default(ACTIVE)
+  isAdapted   Boolean       @default(false) @map("is_adapted")
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
-  evaluations Evaluation[]
-  reportCards ReportCard[]
+  evaluations      Evaluation[]
+  reportCards      ReportCard[]
+  adaptedCriteria  AdaptedCriterion[]
 
   @@index([grade, division])
   @@index([status])
+  @@index([isAdapted])
   @@map("students")
 }
 
@@ -153,9 +156,10 @@ model Subject {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  criteria    EvaluationCriterion[]
-  assignments CourseAssignment[]
-  evaluations Evaluation[]
+  criteria         EvaluationCriterion[]
+  adaptedCriteria  AdaptedCriterion[]
+  assignments      CourseAssignment[]
+  evaluations      Evaluation[]
 
   @@unique([name])
   @@index([active])
@@ -180,6 +184,27 @@ model EvaluationCriterion {
   @@index([subjectId])
   @@index([active])
   @@map("evaluation_criteria")
+}
+
+model AdaptedCriterion {
+  id          String   @id @default(uuid()) @db.Uuid
+  studentId   String   @map("student_id") @db.Uuid
+  subjectId   String   @map("subject_id") @db.Uuid
+  name        String
+  description String
+  order       Int      @default(0)
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  student          Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
+  subject          Subject                  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  evaluationGrades AdaptedEvaluationGrade[]
+
+  @@index([studentId])
+  @@index([subjectId])
+  @@index([studentId, subjectId])
+  @@map("adapted_criteria")
 }
 
 model GradingScale {
@@ -207,8 +232,9 @@ model GradingScaleLevel {
   createdAt      DateTime @default(now()) @map("created_at")
   updatedAt      DateTime @updatedAt @map("updated_at")
 
-  gradingScale     GradingScale      @relation(fields: [gradingScaleId], references: [id], onDelete: Cascade)
-  evaluationGrades EvaluationGrade[]
+  gradingScale          GradingScale            @relation(fields: [gradingScaleId], references: [id], onDelete: Cascade)
+  evaluationGrades      EvaluationGrade[]
+  adaptedEvaluationGrades AdaptedEvaluationGrade[]
 
   @@unique([gradingScaleId, value])
   @@index([gradingScaleId])
@@ -275,7 +301,8 @@ model Evaluation {
   teacher Teacher             @relation(fields: [teacherId], references: [id], onDelete: Cascade)
   subject Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
   period  AcademicPeriod      @relation(fields: [periodId], references: [id], onDelete: Cascade)
-  grades  EvaluationGrade[]
+  grades         EvaluationGrade[]
+  adaptedGrades  AdaptedEvaluationGrade[]
 
   @@unique([studentId, teacherId, subjectId, periodId])
   @@index([studentId])
@@ -304,6 +331,25 @@ model EvaluationGrade {
   @@index([criterionId])
   @@index([scaleLevelId])
   @@map("evaluation_grades")
+}
+
+model AdaptedEvaluationGrade {
+  id                 String   @id @default(uuid()) @db.Uuid
+  evaluationId       String   @map("evaluation_id") @db.Uuid
+  adaptedCriterionId String   @map("adapted_criterion_id") @db.Uuid
+  scaleLevelId       String   @map("scale_level_id") @db.Uuid
+  observation        String?
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  evaluation       Evaluation        @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  adaptedCriterion AdaptedCriterion  @relation(fields: [adaptedCriterionId], references: [id], onDelete: Restrict)
+  scaleLevel       GradingScaleLevel @relation(fields: [scaleLevelId], references: [id], onDelete: Restrict)
+
+  @@unique([evaluationId, adaptedCriterionId])
+  @@index([evaluationId])
+  @@index([adaptedCriterionId])
+  @@map("adapted_evaluation_grades")
 }
 
 model ReportCard {

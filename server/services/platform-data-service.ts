@@ -53,8 +53,15 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       return []
     })
 
-    const activeStudents = students.filter((student) => student.status === "ACTIVE")
+    const activeStudents = students.filter((student) => student.status === "ACTIVE" && !student.isAdapted)
+    const activeAdaptedStudents = students.filter((student) => student.status === "ACTIVE" && student.isAdapted)
     const mappedStudents: PlatformData["students"] = activeStudents.map((student) => ({
+      id: student.id,
+      name: `${student.lastName}, ${student.firstName}`,
+      courseId: courseIdFromParts(student.grade, student.division),
+      parentEmail: student.familyEmail,
+    }))
+    const mappedAdaptedStudents: PlatformData["adaptedStudents"] = activeAdaptedStudents.map((student) => ({
       id: student.id,
       name: `${student.lastName}, ${student.firstName}`,
       courseId: courseIdFromParts(student.grade, student.division),
@@ -280,6 +287,9 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     const scopedStudents = isTeacherUser
       ? mappedStudents.filter((student) => teacherStudentIds.has(student.id))
       : mappedStudents
+    const scopedAdaptedStudents = isTeacherUser
+      ? mappedAdaptedStudents.filter((student) => teacherCourseIds.has(student.courseId))
+      : mappedAdaptedStudents
     const scopedCourses = isTeacherUser
       ? mappedCourses.filter((course) => teacherCourseIds.has(course.id))
       : mappedCourses
@@ -325,6 +335,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       subjects: scopedSubjects,
       teachers: scopedTeachers,
       students: scopedStudents,
+      adaptedStudents: scopedAdaptedStudents,
       reportCards: scopedReportCards,
       courseAssignments: filteredAssignments,
       evaluations: filteredEvaluations,

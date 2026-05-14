@@ -153,6 +153,7 @@ export async function POST(request: Request) {
         grade: course.grade,
         division: course.division,
         status: "ACTIVE",
+        isAdapted: false,
       },
       select: { id: true },
     })

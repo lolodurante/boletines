@@ -61,6 +61,7 @@ const directorNavItems: NavItem[] = [
       { label: "Períodos", href: "/director/configuracion/periodos" },
       { label: "Docentes y asignaciones", href: "/director/configuracion/docentes" },
       { label: "Cursos y alumnos", href: "/director/configuracion/alumnos" },
+      { label: "Alumnos con adaptación", href: "/director/configuracion/alumnos-adaptados" },
       { label: "Usuarios", href: "/director/configuracion/usuarios" },
     ]
   },
@@ -70,10 +71,12 @@ const teacherNavItems: NavItem[] = [
   { label: "Inicio", href: "/docente/dashboard", icon: Home },
   { label: "Mis cursos", href: "/docente/cursos", icon: BookOpen },
   { label: "Calificaciones", href: "/docente/calificaciones", icon: ClipboardList },
+  { label: "Alumnos adaptados", href: "/docente/calificaciones/adaptados", icon: GraduationCap },
 ]
 
 const psicopedagogaNavItems: NavItem[] = [
   { label: "Alumnos", href: "/psicopedagoga/dashboard", icon: GraduationCap },
+  { label: "Adaptaciones curriculares", href: "/psicopedagoga/adaptaciones", icon: ClipboardList },
 ]
 
 interface AppSidebarProps {

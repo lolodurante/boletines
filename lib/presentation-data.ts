@@ -82,6 +82,13 @@ export interface TeacherPerformanceRow {
   lastActivity: string
 }
 
+export interface AdaptedStudent {
+  id: string
+  name: string
+  courseId: string
+  parentEmail: string | null
+}
+
 export interface PlatformData {
   directorUser: typeof directorUser
   currentTeacher: typeof currentTeacher
@@ -90,6 +97,7 @@ export interface PlatformData {
   subjects: typeof subjects
   teachers: typeof teachers
   students: typeof students
+  adaptedStudents: AdaptedStudent[]
   reportCards: typeof reportCards
   courseAssignments: typeof courseAssignments
   evaluations: typeof evaluations
@@ -243,6 +251,7 @@ export const initialPlatformData: PlatformData = {
   subjects,
   teachers,
   students,
+  adaptedStudents: [],
   reportCards,
   courseAssignments,
   evaluations,
@@ -276,6 +285,7 @@ export const emptyPlatformData: PlatformData = {
   subjects: [],
   teachers: [],
   students: [],
+  adaptedStudents: [],
   reportCards: [],
   courseAssignments: [],
   evaluations: [],

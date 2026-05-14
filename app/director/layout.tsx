@@ -1,6 +1,8 @@
 import { AppSidebar } from "@/components/app-sidebar"
 import { requireDirectorOrAdmin } from "@/lib/auth/current-user"
 
+export const dynamic = "force-dynamic"
+
 export default async function DirectorLayout({
   children,
 }: {
