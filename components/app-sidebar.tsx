@@ -205,17 +205,17 @@ export function AppSidebar({ role, userName, userRole }: AppSidebarProps) {
             {userRole}
           </Badge>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-8 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
-          asChild
-        >
-          <Link href="/logout">
+        <form action="/logout" method="post">
+          <Button
+            type="submit"
+            variant="ghost"
+            size="icon"
+            className="size-8 shrink-0 text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-foreground"
+          >
             <LogOut className="size-4" />
             <span className="sr-only">Cerrar sesion</span>
-          </Link>
-        </Button>
+          </Button>
+        </form>
       </div>
     </div>
   )
