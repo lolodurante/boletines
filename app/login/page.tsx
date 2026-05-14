@@ -1,5 +1,4 @@
 import { redirect } from "next/navigation"
-import { isSupabaseAuthConfigured } from "@/lib/supabase/config"
 import { getCurrentAuthUser } from "@/lib/auth/current-user"
 import { LoginForm } from "./login-form"
 
@@ -10,12 +9,10 @@ export default async function LoginPage({
 }) {
   const params = await searchParams
 
-  if (isSupabaseAuthConfigured()) {
-    const user = await getCurrentAuthUser()
-    if (user?.role === "TEACHER") redirect("/docente/dashboard")
-    if (user?.role === "DIRECTOR" || user?.role === "ADMIN") redirect("/director/dashboard")
-    if (user?.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
-  }
+  const user = await getCurrentAuthUser()
+  if (user?.role === "TEACHER") redirect("/docente/dashboard")
+  if (user?.role === "DIRECTOR" || user?.role === "ADMIN") redirect("/director/dashboard")
+  if (user?.role === "PSICOPEDAGOGA") redirect("/psicopedagoga/dashboard")
 
-  return <LoginForm nextPath={params.next} authEnabled={isSupabaseAuthConfigured()} error={params.error} />
+  return <LoginForm nextPath={params.next} error={params.error} />
 }

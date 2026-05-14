@@ -19,11 +19,6 @@ const courseActionSchema = z.discriminatedUnion("action", [
   }),
 ])
 
-function hasConfiguredDatabase() {
-  const url = process.env.DATABASE_URL
-  return Boolean(url && !url.includes("localhost:5432/boletines_labarden"))
-}
-
 function normalizeCourse(input: { grade: string; division: string }) {
   return {
     grade: input.grade.trim(),
@@ -44,10 +39,6 @@ export async function POST(request: Request) {
   const parsed = courseActionSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: "Payload invalido" }, { status: 400 })
-  }
-
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
   }
 
   try {

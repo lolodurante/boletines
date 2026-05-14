@@ -31,11 +31,6 @@ const subjectsSaveSchema = z.object({
   subjects: z.array(subjectSchema),
 })
 
-function hasConfiguredDatabase() {
-  const url = process.env.DATABASE_URL
-  return Boolean(url && !url.includes("localhost:5432/boletines_labarden"))
-}
-
 function normalizeGrade(grade: string) {
   return grade.replace("°", "")
 }
@@ -52,10 +47,6 @@ export async function DELETE(request: Request) {
   const id = searchParams.get("id")
   if (!id) {
     return NextResponse.json({ error: "ID requerido" }, { status: 400 })
-  }
-
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
   }
 
   try {
@@ -88,10 +79,6 @@ export async function POST(request: Request) {
   const parsed = subjectsSaveSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: "Payload invalido" }, { status: 400 })
-  }
-
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
   }
 
   try {

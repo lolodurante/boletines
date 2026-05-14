@@ -7,11 +7,6 @@ import { buildZip, gradeFolder, sanitizeName } from "@/lib/zip/build-zip"
 
 export const dynamic = "force-dynamic"
 
-function hasConfiguredDatabase() {
-  const url = process.env.DATABASE_URL
-  return Boolean(url && !url.includes("localhost:5432/boletines_labarden"))
-}
-
 function pdfBufferFromUrl(pdfUrl: string) {
   const base64 = pdfUrl.replace(/^data:application\/pdf;base64,/, "")
   return Buffer.from(base64, "base64")
@@ -114,10 +109,6 @@ async function generateMissingPdf(reportCard: {
 export async function GET(request: Request) {
   const auth = await requireApiDirectorOrAdmin()
   if (auth.response) return auth.response
-
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
-  }
 
   const { searchParams } = new URL(request.url)
   const periodId = searchParams.get("periodId") ?? undefined

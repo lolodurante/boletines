@@ -28,11 +28,6 @@ const scaleActionSchema = z.discriminatedUnion("action", [
   }),
 ])
 
-function hasConfiguredDatabase() {
-  const url = process.env.DATABASE_URL
-  return Boolean(url && !url.includes("localhost:5432/boletines_labarden"))
-}
-
 function gradeNumber(grade: string) {
   return Number.parseInt(grade.replace("°", ""), 10)
 }
@@ -53,17 +48,12 @@ export async function GET() {
   const auth = await requireApiDirectorOrAdmin()
   if (auth.response) return auth.response
 
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ scales: [], persisted: false })
-  }
-
   const scales = await prisma.gradingScale.findMany({
     include: { levels: { orderBy: { order: "asc" } } },
     orderBy: { gradeFrom: "asc" },
   })
 
   return NextResponse.json({
-    persisted: true,
     scales: scales.map((scale) => ({
       id: scale.id,
       name: scale.name,
@@ -84,10 +74,6 @@ export async function POST(request: Request) {
   const parsed = scaleActionSchema.safeParse(await request.json())
   if (!parsed.success) {
     return NextResponse.json({ error: "Payload invalido" }, { status: 400 })
-  }
-
-  if (!hasConfiguredDatabase()) {
-    return NextResponse.json({ error: "Base de datos no configurada" }, { status: 503 })
   }
 
   try {

@@ -22,11 +22,9 @@ function getAppOrigin() {
 
 export function LoginForm({
   nextPath,
-  authEnabled,
   error,
 }: {
   nextPath?: string
-  authEnabled: boolean
   error?: string
 }) {
   const router = useRouter()
@@ -37,11 +35,6 @@ export function LoginForm({
   const redirectTo = appOrigin ? `${appOrigin}/auth/callback?next=${encodeURIComponent(nextPath || "/")}` : undefined
 
   async function handleGoogleLogin() {
-    if (!authEnabled) {
-      router.push(nextPath || "/director/dashboard")
-      return
-    }
-
     setIsLoading(true)
     setMessage("")
     const supabase = createSupabaseBrowserClient()
@@ -69,14 +62,6 @@ export function LoginForm({
           </div>
         </CardHeader>
         <CardContent className="space-y-4">
-          {!authEnabled && (
-            <Alert>
-              <AlertDescription>
-                Auth no esta configurado en este entorno. El acceso local usa modo demo.
-              </AlertDescription>
-            </Alert>
-          )}
-
           {error && (
             <Alert variant="destructive">
               <AlertDescription>{errorMessages[error] ?? errorMessages.auth_error}</AlertDescription>
