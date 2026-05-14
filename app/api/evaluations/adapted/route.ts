@@ -8,6 +8,8 @@ import { coursePartsFromId } from "@/lib/academic-course"
 
 export const dynamic = "force-dynamic"
 
+const ADAPTED_EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS = 20_000
+
 const adaptedEvaluationSchema = z.object({
   courseId: z.string().min(1),
   subjectId: z.string().uuid(),
@@ -197,63 +199,72 @@ export async function POST(request: Request) {
     const studentIdsToPersist = new Set<string>()
     input.grades.forEach((g) => studentIdsToPersist.add(g.studentId))
     if (input.submit) adaptedStudents.forEach((s) => studentIdsToPersist.add(s.id))
+    const gradesByStudent = new Map<string, typeof input.grades>()
+    for (const grade of input.grades) {
+      const studentGrades = gradesByStudent.get(grade.studentId) ?? []
+      studentGrades.push(grade)
+      gradesByStudent.set(grade.studentId, studentGrades)
+    }
 
-    await prisma.$transaction(async (tx) => {
-      for (const studentId of studentIdsToPersist) {
-        const studentGrades = input.grades.filter((g) => g.studentId === studentId)
+    await prisma.$transaction(
+      async (tx) => {
+        for (const studentId of studentIdsToPersist) {
+          const studentGrades = gradesByStudent.get(studentId) ?? []
 
-        const evaluation = await tx.evaluation.upsert({
-          where: {
-            studentId_teacherId_subjectId_periodId: {
+          const evaluation = await tx.evaluation.upsert({
+            where: {
+              studentId_teacherId_subjectId_periodId: {
+                studentId,
+                teacherId,
+                subjectId: input.subjectId,
+                periodId: input.periodId,
+              },
+            },
+            create: {
               studentId,
               teacherId,
               subjectId: input.subjectId,
               periodId: input.periodId,
+              status,
+              submittedAt,
+              generalObservation: input.observations?.[studentId]?.trim() || null,
+              numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },
-          },
-          create: {
-            studentId,
-            teacherId,
-            subjectId: input.subjectId,
-            periodId: input.periodId,
-            status,
-            submittedAt,
-            generalObservation: input.observations?.[studentId]?.trim() || null,
-            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
-          },
-          update: {
-            status,
-            submittedAt,
-            generalObservation: input.observations?.[studentId]?.trim() || null,
-            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
-          },
-          select: { id: true },
-        })
-
-        for (const g of studentGrades) {
-          if (g.grade === "No evaluado") {
-            await tx.adaptedEvaluationGrade.deleteMany({
-              where: { evaluationId: evaluation.id, adaptedCriterionId: g.adaptedCriterionId },
-            })
-            continue
-          }
-
-          const scaleLevelId = scaleLevelByLabel.get(g.grade)
-          if (!scaleLevelId) throw new Error(`Invalid grade label: ${g.grade}`)
-
-          await tx.adaptedEvaluationGrade.upsert({
-            where: {
-              evaluationId_adaptedCriterionId: {
-                evaluationId: evaluation.id,
-                adaptedCriterionId: g.adaptedCriterionId,
-              },
+            update: {
+              status,
+              submittedAt,
+              generalObservation: input.observations?.[studentId]?.trim() || null,
+              numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },
-            create: { evaluationId: evaluation.id, adaptedCriterionId: g.adaptedCriterionId, scaleLevelId },
-            update: { scaleLevelId },
+            select: { id: true },
           })
+
+          for (const g of studentGrades) {
+            if (g.grade === "No evaluado") {
+              await tx.adaptedEvaluationGrade.deleteMany({
+                where: { evaluationId: evaluation.id, adaptedCriterionId: g.adaptedCriterionId },
+              })
+              continue
+            }
+
+            const scaleLevelId = scaleLevelByLabel.get(g.grade)
+            if (!scaleLevelId) throw new Error(`Invalid grade label: ${g.grade}`)
+
+            await tx.adaptedEvaluationGrade.upsert({
+              where: {
+                evaluationId_adaptedCriterionId: {
+                  evaluationId: evaluation.id,
+                  adaptedCriterionId: g.adaptedCriterionId,
+                },
+              },
+              create: { evaluationId: evaluation.id, adaptedCriterionId: g.adaptedCriterionId, scaleLevelId },
+              update: { scaleLevelId },
+            })
+          }
         }
-      }
-    })
+      },
+      { timeout: ADAPTED_EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS },
+    )
 
     return NextResponse.json({ ok: true })
   } catch (error) {

@@ -6,6 +6,8 @@ import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
 export const dynamic = "force-dynamic"
 
+const GRADING_SCALE_SAVE_TRANSACTION_TIMEOUT_MS = 10_000
+
 const levelSchema = z.object({
   name: z.string().min(1),
   color: z.string().min(1),
@@ -92,33 +94,36 @@ export async function POST(request: Request) {
     const gradeFrom = Math.min(...grades)
     const gradeTo = Math.max(...grades)
 
-    const scale = isUuid(input.id)
-      ? await prisma.gradingScale.upsert({
-          where: { id: input.id },
-          create: { name: input.name, gradeFrom, gradeTo },
-          update: { name: input.name, gradeFrom, gradeTo },
-          select: { id: true },
-        })
-      : await prisma.gradingScale.upsert({
-          where: { name: input.name },
-          create: { name: input.name, gradeFrom, gradeTo },
-          update: { gradeFrom, gradeTo },
-          select: { id: true },
-        })
+    const scale = await prisma.$transaction(
+      async (tx) => {
+        const savedScale = isUuid(input.id)
+          ? await tx.gradingScale.upsert({
+              where: { id: input.id },
+              create: { name: input.name, gradeFrom, gradeTo },
+              update: { name: input.name, gradeFrom, gradeTo },
+              select: { id: true },
+            })
+          : await tx.gradingScale.upsert({
+              where: { name: input.name },
+              create: { name: input.name, gradeFrom, gradeTo },
+              update: { gradeFrom, gradeTo },
+              select: { id: true },
+            })
 
-    await prisma.$transaction([
-      prisma.gradingScaleLevel.deleteMany({ where: { gradingScaleId: scale.id } }),
-      ...input.levels.map((level) =>
-        prisma.gradingScaleLevel.create({
-          data: {
-            gradingScaleId: scale.id,
+        await tx.gradingScaleLevel.deleteMany({ where: { gradingScaleId: savedScale.id } })
+        await tx.gradingScaleLevel.createMany({
+          data: input.levels.map((level) => ({
+            gradingScaleId: savedScale.id,
             label: level.name,
             value: level.name.toUpperCase().replaceAll(" ", "_"),
             order: level.order,
-          },
-        }),
-      ),
-    ])
+          })),
+        })
+
+        return savedScale
+      },
+      { timeout: GRADING_SCALE_SAVE_TRANSACTION_TIMEOUT_MS },
+    )
 
     return NextResponse.json({ ok: true, persisted: true, id: scale.id })
   } catch (error) {

@@ -31,6 +31,9 @@ const subjectsSaveSchema = z.object({
   subjects: z.array(subjectSchema),
 })
 
+const SUBJECT_DELETE_TRANSACTION_TIMEOUT_MS = 10_000
+const SUBJECTS_SAVE_TRANSACTION_TIMEOUT_MS = 20_000
+
 function normalizeGrade(grade: string) {
   return grade.replace("°", "")
 }
@@ -50,19 +53,22 @@ export async function DELETE(request: Request) {
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      await tx.evaluationCriterion.updateMany({
-        where: { subjectId: id },
-        data: { active: false },
-      })
-      await tx.courseAssignment.deleteMany({
-        where: { subjectId: id },
-      })
-      await tx.subject.update({
-        where: { id },
-        data: { active: false },
-      })
-    })
+    await prisma.$transaction(
+      async (tx) => {
+        await tx.evaluationCriterion.updateMany({
+          where: { subjectId: id },
+          data: { active: false },
+        })
+        await tx.courseAssignment.deleteMany({
+          where: { subjectId: id },
+        })
+        await tx.subject.update({
+          where: { id },
+          data: { active: false },
+        })
+      },
+      { timeout: SUBJECT_DELETE_TRANSACTION_TIMEOUT_MS },
+    )
     return NextResponse.json({ ok: true })
   } catch (error) {
     logWarning("Could not delete subject", {
@@ -82,108 +88,122 @@ export async function POST(request: Request) {
   }
 
   try {
-    await prisma.$transaction(async (tx) => {
-      for (const subject of parsed.data.subjects) {
-        const gradeRange = subject.appliesTo.map(normalizeGrade)
-        const activeGrades = new Set(gradeRange)
-        const reportType = subject.entryKind === "ABSENCES" ? "INGLES" : subject.reportType
-        const hasNumericGrade = subject.entryKind === "ACADEMIC" && subject.hasNumericGrade
-        const savedSubject = isUuid(subject.id)
-          ? await tx.subject.upsert({
-              where: { id: subject.id },
-              create: {
-                name: subject.name,
-                type: reportType,
-                entryKind: subject.entryKind,
-                hasNumericGrade,
-                gradeRange,
-              },
-              update: {
-                name: subject.name,
-                type: reportType,
-                entryKind: subject.entryKind,
-                hasNumericGrade,
-                gradeRange,
-                active: true,
-              },
-              select: { id: true },
-            })
-          : await tx.subject.upsert({
-              where: { name: subject.name },
-              create: {
-                name: subject.name,
-                type: reportType,
-                entryKind: subject.entryKind,
-                hasNumericGrade,
-                gradeRange,
-              },
-              update: {
-                type: reportType,
-                entryKind: subject.entryKind,
-                hasNumericGrade,
-                gradeRange,
-                active: true,
-              },
-              select: { id: true },
-            })
+    const subjectsToSave = parsed.data.subjects.map((subject) => {
+      const gradeRange = subject.appliesTo.map(normalizeGrade)
+      const activeGrades = new Set(gradeRange)
+      const reportType = subject.entryKind === "ABSENCES" ? "INGLES" : subject.reportType
+      const hasNumericGrade = subject.entryKind === "ACADEMIC" && subject.hasNumericGrade
+      const criteriaByKey = new Map<string, { id: string; name: string; description?: string; gradeRange: string[] }>()
 
-        const criteriaByKey = new Map<
-          string,
-          { id: string; name: string; description?: string; gradeRange: string[] }
-        >()
-        const activeCriterionIds: string[] = []
-        for (const gradeCriteria of subject.criteriaByGrade) {
-          const grade = normalizeGrade(gradeCriteria.grade)
-          if (!activeGrades.has(grade)) continue
+      for (const gradeCriteria of subject.criteriaByGrade) {
+        const grade = normalizeGrade(gradeCriteria.grade)
+        if (!activeGrades.has(grade)) continue
 
-          for (const criterion of gradeCriteria.criteria) {
-            const key = criterion.id
-            const existing = criteriaByKey.get(key)
-            if (existing) {
-              existing.name = criterion.name
-              existing.description = criterion.description
-              if (!existing.gradeRange.includes(grade)) existing.gradeRange.push(grade)
-              continue
-            }
-
-            criteriaByKey.set(key, {
-              id: criterion.id,
-              name: criterion.name,
-              description: criterion.description,
-              gradeRange: [grade],
-            })
+        for (const criterion of gradeCriteria.criteria) {
+          const key = criterion.id
+          const existing = criteriaByKey.get(key)
+          if (existing) {
+            existing.name = criterion.name
+            existing.description = criterion.description
+            if (!existing.gradeRange.includes(grade)) existing.gradeRange.push(grade)
+            continue
           }
-        }
 
-        for (const criterion of criteriaByKey.values()) {
-          const data = {
-            subjectId: savedSubject.id,
+          criteriaByKey.set(key, {
+            id: criterion.id,
             name: criterion.name,
-            description: criterion.description || criterion.name,
-            gradeRange: criterion.gradeRange,
-            active: true,
-          }
-          const savedCriterion = isUuid(criterion.id)
-            ? await tx.evaluationCriterion.upsert({
-                where: { id: criterion.id },
-                create: data,
-                update: data,
-                select: { id: true },
-              })
-            : await tx.evaluationCriterion.create({ data, select: { id: true } })
-
-          activeCriterionIds.push(savedCriterion.id)
+            description: criterion.description,
+            gradeRange: [grade],
+          })
         }
+      }
 
-        await tx.evaluationCriterion.updateMany({
-          where: {
-            subjectId: savedSubject.id,
-            id: { notIn: activeCriterionIds },
-          },
-          data: { active: false },
-        })
+      return {
+        id: subject.id,
+        name: subject.name,
+        entryKind: subject.entryKind,
+        reportType,
+        hasNumericGrade,
+        gradeRange,
+        criteria: Array.from(criteriaByKey.values()),
       }
     })
+
+    await prisma.$transaction(
+      async (tx) => {
+        for (const subject of subjectsToSave) {
+          const savedSubject = isUuid(subject.id)
+            ? await tx.subject.upsert({
+                where: { id: subject.id },
+                create: {
+                  name: subject.name,
+                  type: subject.reportType,
+                  entryKind: subject.entryKind,
+                  hasNumericGrade: subject.hasNumericGrade,
+                  gradeRange: subject.gradeRange,
+                },
+                update: {
+                  name: subject.name,
+                  type: subject.reportType,
+                  entryKind: subject.entryKind,
+                  hasNumericGrade: subject.hasNumericGrade,
+                  gradeRange: subject.gradeRange,
+                  active: true,
+                },
+                select: { id: true },
+              })
+            : await tx.subject.upsert({
+                where: { name: subject.name },
+                create: {
+                  name: subject.name,
+                  type: subject.reportType,
+                  entryKind: subject.entryKind,
+                  hasNumericGrade: subject.hasNumericGrade,
+                  gradeRange: subject.gradeRange,
+                },
+                update: {
+                  type: subject.reportType,
+                  entryKind: subject.entryKind,
+                  hasNumericGrade: subject.hasNumericGrade,
+                  gradeRange: subject.gradeRange,
+                  active: true,
+                },
+                select: { id: true },
+              })
+
+          const activeCriterionIds: string[] = []
+
+          for (const criterion of subject.criteria) {
+            const data = {
+              subjectId: savedSubject.id,
+              name: criterion.name,
+              description: criterion.description || criterion.name,
+              gradeRange: criterion.gradeRange,
+              active: true,
+            }
+            const savedCriterion = isUuid(criterion.id)
+              ? await tx.evaluationCriterion.upsert({
+                  where: { id: criterion.id },
+                  create: data,
+                  update: data,
+                  select: { id: true },
+                })
+              : await tx.evaluationCriterion.create({ data, select: { id: true } })
+
+            activeCriterionIds.push(savedCriterion.id)
+          }
+
+          await tx.evaluationCriterion.updateMany({
+            where: {
+              subjectId: savedSubject.id,
+              id: { notIn: activeCriterionIds },
+            },
+            data: { active: false },
+          })
+        }
+      },
+      { timeout: SUBJECTS_SAVE_TRANSACTION_TIMEOUT_MS },
+    )
 
     return NextResponse.json({ ok: true, persisted: true })
   } catch (error) {

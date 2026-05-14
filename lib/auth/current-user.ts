@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation"
 import { prisma } from "@/lib/db/client"
 import type { AuthUser } from "@/lib/auth/roles"
+import { normalizeAuthEmail } from "@/lib/auth/email"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export interface CurrentAuthUser extends AuthUser {
@@ -20,9 +21,10 @@ export async function getCurrentAuthUser() {
     return null
   }
   if (!authUser?.email) return null
+  const email = normalizeAuthEmail(authUser.email)
 
-  const localUser = await prisma.user.findUnique({
-    where: { email: authUser.email },
+  const localUser = await prisma.user.findFirst({
+    where: { email: { equals: email, mode: "insensitive" } },
     include: { teacher: true },
   })
   if (!localUser || localUser.status === "DISABLED") return null
@@ -96,7 +98,10 @@ export async function requireApiDirectorOrAdmin() {
   const { user, response } = await requireApiAuthUser()
   if (response) return { user: null, response }
   if (user.role !== "DIRECTOR" && user.role !== "ADMIN") {
-    return { user: null, response: Response.json({ error: "No autorizado" }, { status: 403 }) }
+    return {
+      user: null,
+      response: Response.json({ error: "Tu usuario no tiene permisos de Director o Administrador" }, { status: 403 }),
+    }
   }
   return { user, response: null }
 }

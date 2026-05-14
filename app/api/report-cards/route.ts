@@ -7,6 +7,8 @@ import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
 export const dynamic = "force-dynamic"
 
+const REPORT_CARD_REVISION_TRANSACTION_TIMEOUT_MS = 10_000
+
 const reportCardActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("generate_pdf"),
@@ -41,28 +43,31 @@ export async function POST(request: Request) {
         return NextResponse.json({ error: "Boletin no encontrado" }, { status: 404 })
       }
 
-      const updateResult = await prisma.$transaction(async (tx) => {
-        const evaluations = await tx.evaluation.updateMany({
-          where: {
-            studentId: reportCard.studentId,
-            periodId: reportCard.periodId,
-            teacherId: revisionInput.teacherId,
-            subject: { type: reportCard.type },
-          },
-          data: { status: "NEEDS_REVISION" },
-        })
-        if (evaluations.count === 0) return evaluations
+      const updateResult = await prisma.$transaction(
+        async (tx) => {
+          const evaluations = await tx.evaluation.updateMany({
+            where: {
+              studentId: reportCard.studentId,
+              periodId: reportCard.periodId,
+              teacherId: revisionInput.teacherId,
+              subject: { type: reportCard.type },
+            },
+            data: { status: "NEEDS_REVISION" },
+          })
+          if (evaluations.count === 0) return evaluations
 
-        await tx.reportCard.update({
-          where: { id: revisionInput.reportCardId },
-          data: {
-            status: "NEEDS_REVISION",
-            directorObservation: revisionInput.message,
-          },
-        })
+          await tx.reportCard.update({
+            where: { id: revisionInput.reportCardId },
+            data: {
+              status: "NEEDS_REVISION",
+              directorObservation: revisionInput.message,
+            },
+          })
 
-        return evaluations
-      })
+          return evaluations
+        },
+        { timeout: REPORT_CARD_REVISION_TRANSACTION_TIMEOUT_MS },
+      )
       if (updateResult.count === 0) {
         return NextResponse.json({ error: "El docente seleccionado no tiene evaluaciones en este boletin" }, { status: 400 })
       }

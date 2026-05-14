@@ -6,6 +6,8 @@ import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
 export const dynamic = "force-dynamic"
 
+const PERIOD_SAVE_TRANSACTION_TIMEOUT_MS = 10_000
+
 const periodActionSchema = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("save"),
@@ -62,19 +64,33 @@ export async function POST(request: Request) {
       )
     }
 
-    const period = await prisma.$transaction(async (tx) => {
-      if (input.active) {
-        await tx.academicPeriod.updateMany({
-          where: { status: "ACTIVE", ...(input.id ? { id: { not: input.id } } : {}) },
-          data: { status: "CLOSED" },
-        })
-      }
+    const period = await prisma.$transaction(
+      async (tx) => {
+        if (input.active) {
+          await tx.academicPeriod.updateMany({
+            where: { status: "ACTIVE", ...(input.id ? { id: { not: input.id } } : {}) },
+            data: { status: "CLOSED" },
+          })
+        }
 
-      if (input.id) {
-        return tx.academicPeriod.update({
-          where: { id: input.id },
+        if (input.id) {
+          return tx.academicPeriod.update({
+            where: { id: input.id },
+            data: {
+              name: input.name,
+              startDate,
+              dueDate,
+              teacherDeadline,
+              status: input.active ? "ACTIVE" : "DRAFT",
+            },
+            select: { id: true },
+          })
+        }
+
+        return tx.academicPeriod.create({
           data: {
             name: input.name,
+            type: "TRIMESTER",
             startDate,
             dueDate,
             teacherDeadline,
@@ -82,20 +98,9 @@ export async function POST(request: Request) {
           },
           select: { id: true },
         })
-      }
-
-      return tx.academicPeriod.create({
-        data: {
-          name: input.name,
-          type: "TRIMESTER",
-          startDate,
-          dueDate,
-          teacherDeadline,
-          status: input.active ? "ACTIVE" : "DRAFT",
-        },
-        select: { id: true },
-      })
-    })
+      },
+      { timeout: PERIOD_SAVE_TRANSACTION_TIMEOUT_MS },
+    )
 
     return NextResponse.json({ ok: true, persisted: true, id: period.id })
   } catch (error) {

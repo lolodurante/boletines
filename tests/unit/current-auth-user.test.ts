@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   getUser: vi.fn(),
-  findUnique: vi.fn(),
+  findFirst: vi.fn(),
   update: vi.fn(),
 }))
 
@@ -27,7 +27,7 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("@/lib/db/client", () => ({
   prisma: {
     user: {
-      findUnique: mocks.findUnique,
+      findFirst: mocks.findFirst,
       update: mocks.update,
     },
   },
@@ -43,7 +43,7 @@ describe("getCurrentAuthUser", () => {
   })
 
   it("returns an active local user and links auth id", async () => {
-    mocks.findUnique.mockResolvedValue({
+    mocks.findFirst.mockResolvedValue({
       id: "user-1",
       authUserId: null,
       role: "TEACHER",
@@ -68,8 +68,37 @@ describe("getCurrentAuthUser", () => {
     })
   })
 
+  it("matches auth emails case-insensitively and keeps director role", async () => {
+    mocks.getUser.mockResolvedValue({
+      data: { user: { id: "auth-director", email: "DIRECCION@LABARDEN.EDU.AR" } },
+      error: null,
+    })
+    mocks.findFirst.mockResolvedValue({
+      id: "user-director",
+      authUserId: "auth-director",
+      role: "DIRECTOR",
+      name: "Directora",
+      email: "direccion@labarden.edu.ar",
+      status: "ACTIVE",
+      teacher: null,
+    })
+
+    const { getCurrentAuthUser } = await import("@/lib/auth/current-user")
+    const user = await getCurrentAuthUser()
+
+    expect(mocks.findFirst).toHaveBeenCalledWith({
+      where: { email: { equals: "direccion@labarden.edu.ar", mode: "insensitive" } },
+      include: { teacher: true },
+    })
+    expect(user).toMatchObject({
+      id: "user-director",
+      role: "DIRECTOR",
+      status: "ACTIVE",
+    })
+  })
+
   it("rejects disabled local users", async () => {
-    mocks.findUnique.mockResolvedValue({
+    mocks.findFirst.mockResolvedValue({
       id: "user-1",
       authUserId: "auth-1",
       role: "TEACHER",
@@ -86,7 +115,7 @@ describe("getCurrentAuthUser", () => {
   })
 
   it("returns null when no matching local user exists", async () => {
-    mocks.findUnique.mockResolvedValue(null)
+    mocks.findFirst.mockResolvedValue(null)
 
     const { getCurrentAuthUser } = await import("@/lib/auth/current-user")
 

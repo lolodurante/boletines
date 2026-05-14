@@ -76,6 +76,22 @@ function spreadToAllGrades(subject: Subject, criteria: Criterion[]): GradeCriter
   return subject.criteriaByGrade.map((gc) => ({ ...gc, criteria }))
 }
 
+function makeLocalCriterionId() {
+  return `c${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+}
+
+function cloneCriteria(criteria: Criterion[]): Criterion[] {
+  return criteria.map((criterion) => ({ ...criterion, id: makeLocalCriterionId() }))
+}
+
+function spreadClonedCriteriaToActiveGrades(subject: Subject, criteria: Criterion[]): GradeCriteria[] {
+  const activeGrades = new Set(subject.appliesTo)
+  return subject.criteriaByGrade.map((gc) => ({
+    ...gc,
+    criteria: activeGrades.has(gc.grade) ? cloneCriteria(criteria) : gc.criteria,
+  }))
+}
+
 function getReportTypeLabel(reportType: Subject["reportType"]) {
   return reportType === "INGLES" ? "Inglés" : "Español"
 }
@@ -215,7 +231,7 @@ export default function MateriasPage() {
     const name = newSubjectName.trim()
     if (!name) return
     const newSubject: Subject = {
-      id: `s${Date.now()}`,
+      id: `s${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name,
       reportType: "ESPANOL",
       entryKind: "ACADEMIC",
@@ -322,7 +338,7 @@ export default function MateriasPage() {
   const handleAddSharedCriterion = () => {
     const name = newCriterionName.trim()
     if (!name || !selectedSubject) return
-    const newCriterion: Criterion = { id: `c${Date.now()}`, name, description: "" }
+    const newCriterion: Criterion = { id: makeLocalCriterionId(), name, description: "" }
     setSubjects((prev) =>
       prev.map((s) =>
         s.id === selectedSubject.id
@@ -369,7 +385,7 @@ export default function MateriasPage() {
   const handleAddCriterionForGrade = (grade: string) => {
     const name = newCriterionName.trim()
     if (!name || !selectedSubject) return
-    const newCriterion: Criterion = { id: `c${Date.now()}`, name, description: "" }
+    const newCriterion: Criterion = { id: makeLocalCriterionId(), name, description: "" }
     setSubjects((prev) =>
       prev.map((s) =>
         s.id === selectedSubject.id
@@ -426,12 +442,11 @@ export default function MateriasPage() {
 
   const handleExpandToPerGrade = () => {
     if (!selectedSubject) return
-    // Copy current shared criteria to each active grade before expanding
     const current = getSharedCriteria(selectedSubject)
     setSubjects((prev) =>
       prev.map((s) =>
         s.id === selectedSubject.id
-          ? { ...s, sharedCriteria: false, criteriaByGrade: spreadToAllGrades(s, current) }
+          ? { ...s, sharedCriteria: false, criteriaByGrade: spreadClonedCriteriaToActiveGrades(s, current) }
           : s,
       ),
     )

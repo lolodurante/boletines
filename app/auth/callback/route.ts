@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server"
 import { prisma } from "@/lib/db/client"
+import { normalizeAuthEmail } from "@/lib/auth/email"
 import { createSupabaseServerClient } from "@/lib/supabase/server"
 
 export async function GET(request: Request) {
@@ -22,9 +23,10 @@ export async function GET(request: Request) {
       await supabase.auth.signOut()
       return NextResponse.redirect(new URL("/login?error=auth_error", url.origin))
     }
+    const email = normalizeAuthEmail(authUser.email)
 
-    const localUser = await prisma.user.findUnique({
-      where: { email: authUser.email },
+    const localUser = await prisma.user.findFirst({
+      where: { email: { equals: email, mode: "insensitive" } },
     })
 
     if (!localUser || localUser.status === "DISABLED") {

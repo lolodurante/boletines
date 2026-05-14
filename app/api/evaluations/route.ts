@@ -8,6 +8,8 @@ import { teacherOwnsAssignment } from "@/lib/auth/assignment-guards"
 
 export const dynamic = "force-dynamic"
 
+const EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS = 20_000
+
 const evaluationSaveSchema = z.object({
   courseId: z.string().min(1),
   subjectId: z.string().min(1),
@@ -207,47 +209,50 @@ export async function POST(request: Request) {
       })
       if (input.submit) students.forEach((student) => studentIdsToPersist.add(student.id))
 
-      await prisma.$transaction(async (tx) => {
-        for (const studentId of studentIdsToPersist) {
-          const value = specialValues[studentId]?.trim() || null
-          await tx.evaluation.upsert({
-            where: {
-              studentId_teacherId_subjectId_periodId: {
+      await prisma.$transaction(
+        async (tx) => {
+          for (const studentId of studentIdsToPersist) {
+            const value = specialValues[studentId]?.trim() || null
+            await tx.evaluation.upsert({
+              where: {
+                studentId_teacherId_subjectId_periodId: {
+                  studentId,
+                  teacherId,
+                  subjectId: input.subjectId,
+                  periodId: input.periodId,
+                },
+              },
+              create: {
                 studentId,
                 teacherId,
                 subjectId: input.subjectId,
                 periodId: input.periodId,
+                status,
+                submittedAt,
+                generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
+                specialValue: subject.entryKind === "ABSENCES" ? value : null,
+                numericGrade: null,
               },
-            },
-            create: {
-              studentId,
-              teacherId,
-              subjectId: input.subjectId,
-              periodId: input.periodId,
-              status,
-              submittedAt,
-              generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
-              specialValue: subject.entryKind === "ABSENCES" ? value : null,
-              numericGrade: null,
-            },
-            update: {
-              status,
-              submittedAt,
-              generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
-              specialValue: subject.entryKind === "ABSENCES" ? value : null,
-              numericGrade: null,
-            },
-          })
-        }
+              update: {
+                status,
+                submittedAt,
+                generalObservation: subject.entryKind === "TEACHER_OBSERVATION" ? value : null,
+                specialValue: subject.entryKind === "ABSENCES" ? value : null,
+                numericGrade: null,
+              },
+            })
+          }
 
-        if (input.submit) {
-          await updateReadyReportCards(tx, {
-            course,
-            periodId: input.periodId,
-            studentIds: Array.from(validStudentIds),
-          })
-        }
-      })
+          if (input.submit) {
+            await updateReadyReportCards(tx, {
+              course,
+              periodId: input.periodId,
+              studentIds: Array.from(validStudentIds),
+            })
+          }
+        },
+        { timeout: EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS },
+      )
 
       return NextResponse.json({ ok: true, persisted: true })
     }
@@ -314,84 +319,93 @@ export async function POST(request: Request) {
     const studentIdsToPersist = new Set<string>()
     input.grades.forEach((grade) => studentIdsToPersist.add(grade.studentId))
     if (input.submit) students.forEach((student) => studentIdsToPersist.add(student.id))
+    const gradesByStudent = new Map<string, typeof input.grades>()
+    for (const grade of input.grades) {
+      const studentGrades = gradesByStudent.get(grade.studentId) ?? []
+      studentGrades.push(grade)
+      gradesByStudent.set(grade.studentId, studentGrades)
+    }
 
-    await prisma.$transaction(async (tx) => {
-      for (const studentId of studentIdsToPersist) {
-        const studentGrades = input.grades.filter((grade) => grade.studentId === studentId)
+    await prisma.$transaction(
+      async (tx) => {
+        for (const studentId of studentIdsToPersist) {
+          const studentGrades = gradesByStudent.get(studentId) ?? []
 
-        const evaluation = await tx.evaluation.upsert({
-          where: {
-            studentId_teacherId_subjectId_periodId: {
+          const evaluation = await tx.evaluation.upsert({
+            where: {
+              studentId_teacherId_subjectId_periodId: {
+                studentId,
+                teacherId,
+                subjectId: input.subjectId,
+                periodId: input.periodId,
+              },
+            },
+            create: {
               studentId,
               teacherId,
               subjectId: input.subjectId,
               periodId: input.periodId,
-            },
-          },
-          create: {
-            studentId,
-            teacherId,
-            subjectId: input.subjectId,
-            periodId: input.periodId,
-            status,
-            submittedAt,
-            generalObservation: input.generalObservation?.trim() || null,
-            specialValue: null,
-            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
-          },
-          update: {
-            status,
-            submittedAt,
-            generalObservation: input.generalObservation?.trim() || null,
-            specialValue: null,
-            numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
-          },
-          select: { id: true },
-        })
-
-        for (const grade of studentGrades) {
-          if (grade.grade === "No evaluado") {
-            await tx.evaluationGrade.deleteMany({
-              where: {
-                evaluationId: evaluation.id,
-                criterionId: grade.criterionId,
-              },
-            })
-            continue
-          }
-
-          const scaleLevelId = scaleLevelByLabel.get(grade.grade)
-          if (!scaleLevelId) throw new Error(`Invalid grade label: ${grade.grade}`)
-
-          await tx.evaluationGrade.upsert({
-            where: {
-              evaluationId_criterionId: {
-                evaluationId: evaluation.id,
-                criterionId: grade.criterionId,
-              },
-            },
-            create: {
-              evaluationId: evaluation.id,
-              criterionId: grade.criterionId,
-              scaleLevelId,
-              observation: null,
+              status,
+              submittedAt,
+              generalObservation: input.generalObservation?.trim() || null,
+              specialValue: null,
+              numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },
             update: {
-              scaleLevelId,
-              observation: null,
+              status,
+              submittedAt,
+              generalObservation: input.generalObservation?.trim() || null,
+              specialValue: null,
+              numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },
+            select: { id: true },
+          })
+
+          for (const grade of studentGrades) {
+            if (grade.grade === "No evaluado") {
+              await tx.evaluationGrade.deleteMany({
+                where: {
+                  evaluationId: evaluation.id,
+                  criterionId: grade.criterionId,
+                },
+              })
+              continue
+            }
+
+            const scaleLevelId = scaleLevelByLabel.get(grade.grade)
+            if (!scaleLevelId) throw new Error(`Invalid grade label: ${grade.grade}`)
+
+            await tx.evaluationGrade.upsert({
+              where: {
+                evaluationId_criterionId: {
+                  evaluationId: evaluation.id,
+                  criterionId: grade.criterionId,
+                },
+              },
+              create: {
+                evaluationId: evaluation.id,
+                criterionId: grade.criterionId,
+                scaleLevelId,
+                observation: null,
+              },
+              update: {
+                scaleLevelId,
+                observation: null,
+              },
+            })
+          }
+        }
+
+        if (input.submit) {
+          await updateReadyReportCards(tx, {
+            course,
+            periodId: input.periodId,
+            studentIds: Array.from(validStudentIds),
           })
         }
-      }
-
-      if (input.submit) {
-        await updateReadyReportCards(tx, {
-          course,
-          periodId: input.periodId,
-          studentIds: Array.from(validStudentIds),
-        })
-      }
-    })
+      },
+      { timeout: EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS },
+    )
 
     return NextResponse.json({ ok: true, persisted: true })
   } catch (error) {

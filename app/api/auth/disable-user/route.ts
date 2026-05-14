@@ -4,7 +4,10 @@ import { prisma } from "@/lib/db/client"
 import { requireApiDirectorOrAdmin } from "@/lib/auth/current-user"
 
 const schema = z.object({
-  userId: z.string().min(1),
+  userId: z.string().min(1).optional(),
+  email: z.string().trim().email().optional(),
+}).refine((value) => value.userId || value.email, {
+  message: "userId o email es requerido",
 })
 
 export async function POST(request: NextRequest) {
@@ -17,9 +20,11 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Datos inválidos" }, { status: 400 })
   }
 
-  const { userId } = parsed.data
+  const { userId, email } = parsed.data
 
-  const user = await prisma.user.findUnique({ where: { id: userId } })
+  const user = userId
+    ? await prisma.user.findUnique({ where: { id: userId } })
+    : await prisma.user.findFirst({ where: { email: { equals: email, mode: "insensitive" } } })
   if (!user) {
     return NextResponse.json({ error: "Usuario no encontrado" }, { status: 404 })
   }
@@ -33,7 +38,7 @@ export async function POST(request: NextRequest) {
   }
 
   await prisma.user.update({
-    where: { id: userId },
+    where: { id: user.id },
     data: { status: "DISABLED" },
   })
 

@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
 
   await prisma.user.update({
     where: { id: userId },
-    data: { status: "INVITED" },
+    data: { status: "ACTIVE" },
   })
 
   return NextResponse.json({ ok: true })

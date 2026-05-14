@@ -43,7 +43,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table"
-import { Plus, UserX, Mail, UserCheck } from "lucide-react"
+import { Plus, UserX, UserCheck } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 import type { UserRole } from "@/types/domain"
@@ -67,8 +67,8 @@ const roleLabel: Record<UserRole, string> = {
 }
 
 const statusLabel: Record<UserStatus, string> = {
-  INVITED: "Invitado",
-  ACTIVE: "Activo",
+  INVITED: "Habilitado",
+  ACTIVE: "Habilitado",
   DISABLED: "Desactivado",
 }
 
@@ -110,7 +110,7 @@ export default function UsuariosPage() {
 
     setIsCreating(true)
     try {
-      const res = await fetch("/api/auth/invite-user", {
+      const res = await fetch("/api/auth/allow-user", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: newEmail.trim(), name: newName.trim(), role: newRole }),
@@ -122,12 +122,7 @@ export default function UsuariosPage() {
         return
       }
 
-      const result = (await res.json().catch(() => null)) as { status?: string } | null
-      toast.success(
-        result?.status === "already_active"
-          ? "El usuario ya tiene acceso activo"
-          : "Invitación enviada",
-      )
+      toast.success("Usuario habilitado")
       setIsCreateOpen(false)
       setNewName("")
       setNewEmail("")
@@ -135,29 +130,6 @@ export default function UsuariosPage() {
       fetchUsers()
     } finally {
       setIsCreating(false)
-    }
-  }
-
-  const handleInvite = async (user: UserRow) => {
-    if (actioningId) return
-    setActioningId(user.id)
-    try {
-      const res = await fetch("/api/auth/invite-user", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ userId: user.id }),
-      })
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => null)) as { error?: string } | null
-        toast.error(err?.error ?? "No se pudo enviar la invitación")
-        return
-      }
-
-      toast.success("Invitación enviada")
-      fetchUsers()
-    } finally {
-      setActioningId(null)
     }
   }
 
@@ -202,9 +174,9 @@ export default function UsuariosPage() {
         return
       }
 
-      toast.success("Usuario habilitado — se enviará una nueva invitación")
+      toast.success("Usuario habilitado")
       setUsers((prev) =>
-        prev.map((u) => (u.id === user.id ? { ...u, status: "INVITED" } : u)),
+        prev.map((u) => (u.id === user.id ? { ...u, status: "ACTIVE" } : u)),
       )
     } finally {
       setActioningId(null)
@@ -234,7 +206,7 @@ export default function UsuariosPage() {
             <DialogHeader>
               <DialogTitle>Crear usuario</DialogTitle>
               <DialogDescription>
-                Se enviará una invitación por email para que el usuario active su cuenta.
+                El usuario quedará habilitado y podrá ingresar con su cuenta autorizada.
               </DialogDescription>
             </DialogHeader>
             <div className="flex flex-col gap-4 py-4">
@@ -283,7 +255,7 @@ export default function UsuariosPage() {
                 onClick={handleCreate}
                 disabled={!newName.trim() || !newEmail.trim() || isCreating}
               >
-                {isCreating ? "Enviando..." : "Crear y enviar invitación"}
+                {isCreating ? "Guardando..." : "Habilitar usuario"}
               </Button>
             </DialogFooter>
           </DialogContent>
@@ -358,35 +330,6 @@ export default function UsuariosPage() {
                               <Button
                                 variant="ghost"
                                 size="icon"
-                                title="Enviar invitación"
-                                disabled={actioningId === user.id}
-                              >
-                                <Mail className="size-4" />
-                              </Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Enviar invitación</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Se enviará un email de invitación a{" "}
-                                  <strong>{user.email}</strong>.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => handleInvite(user)}>
-                                  Enviar
-                                </AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        )}
-                        {user.status !== "DISABLED" && (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button
-                                variant="ghost"
-                                size="icon"
                                 className="text-destructive hover:text-destructive"
                                 title="Desactivar acceso"
                                 disabled={actioningId === user.id}
@@ -433,8 +376,7 @@ export default function UsuariosPage() {
                                   ¿Habilitar a {user.name}?
                                 </AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Se enviará una nueva invitación a{" "}
-                                  <strong>{user.email}</strong> para que active su cuenta.
+                                  El usuario podrá volver a ingresar con su cuenta autorizada.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>

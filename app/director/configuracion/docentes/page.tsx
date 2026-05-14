@@ -153,10 +153,10 @@ export default function DocentesPage() {
     toast.success("Asignacion eliminada")
   }
 
-  const handleInviteTeacher = async () => {
+  const handleAllowTeacherAccess = async () => {
     if (!selectedTeacher) return
 
-    const response = await fetch("/api/auth/invite-user", {
+    const response = await fetch("/api/auth/allow-user", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
@@ -168,12 +168,11 @@ export default function DocentesPage() {
 
     if (!response.ok) {
       const error = (await response.json().catch(() => null)) as { error?: string } | null
-      toast.error(error?.error ?? "No se pudo enviar la invitacion")
+      toast.error(error?.error ?? "No se pudo habilitar el acceso")
       return
     }
 
-    const result = (await response.json().catch(() => null)) as { status?: string } | null
-    toast.success(result?.status === "already_active" ? "El docente ya tiene acceso activo" : "Invitacion enviada")
+    toast.success("Acceso habilitado")
   }
 
   const handleDisableTeacherAccess = async () => {
@@ -285,19 +284,19 @@ export default function DocentesPage() {
                   <div className="flex flex-col gap-2 sm:flex-row">
                     <AlertDialog>
                       <AlertDialogTrigger asChild>
-                        <Button variant="outline" size="sm">Invitar</Button>
+                        <Button variant="outline" size="sm">Habilitar acceso</Button>
                       </AlertDialogTrigger>
                       <AlertDialogContent>
                         <AlertDialogHeader>
-                          <AlertDialogTitle>Enviar invitación</AlertDialogTitle>
+                          <AlertDialogTitle>Habilitar acceso</AlertDialogTitle>
                           <AlertDialogDescription>
-                            Se enviará un email de invitación a <strong>{selectedTeacher.email}</strong> para que acceda al sistema como docente.
+                            <strong>{selectedTeacher.email}</strong> podrá ingresar al sistema como docente.
                           </AlertDialogDescription>
                         </AlertDialogHeader>
                         <AlertDialogFooter>
                           <AlertDialogCancel>Cancelar</AlertDialogCancel>
-                          <AlertDialogAction onClick={handleInviteTeacher}>
-                            Enviar invitación
+                          <AlertDialogAction onClick={handleAllowTeacherAccess}>
+                            Habilitar
                           </AlertDialogAction>
                         </AlertDialogFooter>
                       </AlertDialogContent>
