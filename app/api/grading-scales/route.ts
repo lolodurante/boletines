@@ -9,6 +9,7 @@ export const dynamic = "force-dynamic"
 const GRADING_SCALE_SAVE_TRANSACTION_TIMEOUT_MS = 10_000
 
 const levelSchema = z.object({
+  id: z.string().uuid().optional(),
   name: z.string().min(1),
   color: z.string().min(1),
   order: z.number().int().positive(),
@@ -61,6 +62,7 @@ export async function GET() {
       name: scale.name,
       appliesTo: Array.from({ length: scale.gradeTo - scale.gradeFrom + 1 }, (_, index) => `${scale.gradeFrom + index}°`),
       levels: scale.levels.map((level) => ({
+        id: level.id,
         name: level.label,
         color: colorForLabel(level.label),
         order: level.order,
@@ -110,15 +112,40 @@ export async function POST(request: Request) {
               select: { id: true },
             })
 
-        await tx.gradingScaleLevel.deleteMany({ where: { gradingScaleId: savedScale.id } })
-        await tx.gradingScaleLevel.createMany({
-          data: input.levels.map((level) => ({
+        const existingLevels = await tx.gradingScaleLevel.findMany({
+          where: { gradingScaleId: savedScale.id },
+          select: { id: true },
+        })
+        const existingIds = new Set(existingLevels.map((l) => l.id))
+        const incomingIds = new Set(input.levels.flatMap((l) => (l.id ? [l.id] : [])))
+
+        const toDelete = [...existingIds].filter((id) => !incomingIds.has(id))
+        if (toDelete.length > 0) {
+          const referenced = await tx.evaluationGrade.count({
+            where: { scaleLevelId: { in: toDelete } },
+          })
+          const referencedAdapted = await tx.adaptedEvaluationGrade.count({
+            where: { scaleLevelId: { in: toDelete } },
+          })
+          if (referenced + referencedAdapted > 0) {
+            throw new Error("LEVEL_IN_USE")
+          }
+          await tx.gradingScaleLevel.deleteMany({ where: { id: { in: toDelete } } })
+        }
+
+        for (const level of input.levels) {
+          const data = {
             gradingScaleId: savedScale.id,
             label: level.name,
             value: level.name.toUpperCase().replaceAll(" ", "_"),
             order: level.order,
-          })),
-        })
+          }
+          if (level.id && existingIds.has(level.id)) {
+            await tx.gradingScaleLevel.update({ where: { id: level.id }, data })
+          } else {
+            await tx.gradingScaleLevel.create({ data })
+          }
+        }
 
         return savedScale
       },
@@ -127,9 +154,14 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ ok: true, persisted: true, id: scale.id })
   } catch (error) {
-    logWarning("Could not save grading scale", {
-      reason: error instanceof Error ? error.message : "Unknown grading scale error",
-    })
+    const message = error instanceof Error ? error.message : "Unknown grading scale error"
+    if (message === "LEVEL_IN_USE") {
+      return NextResponse.json(
+        { error: "No se pueden eliminar niveles que ya tienen calificaciones asignadas" },
+        { status: 409 },
+      )
+    }
+    logWarning("Could not save grading scale", { reason: message })
     return NextResponse.json({ error: "No se pudo guardar la escala" }, { status: 500 })
   }
 }

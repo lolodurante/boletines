@@ -44,6 +44,7 @@ import { toast } from "sonner"
 import { cn } from "@/lib/utils"
 
 interface GradeLevel {
+  id?: string
   name: string
   color: string
   order: number
