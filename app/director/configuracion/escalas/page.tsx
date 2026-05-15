@@ -344,7 +344,7 @@ export default function EscalasPage() {
                 Nueva escala
               </Button>
             </SheetTrigger>
-            <SheetContent className="w-[min(100vw,500px)] sm:max-w-[500px]">
+            <SheetContent className="w-[min(100vw,500px)] sm:max-w-[500px] flex flex-col">
               <SheetHeader>
                 <SheetTitle>
                   {editingScale ? "Editar escala" : "Nueva escala"}
@@ -357,7 +357,7 @@ export default function EscalasPage() {
                 </SheetDescription>
               </SheetHeader>
 
-              <div className="mt-6 space-y-6">
+              <div className="mt-6 space-y-6 flex-1 overflow-y-auto pr-1">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Nombre de la escala</label>
                   <Input
@@ -400,7 +400,7 @@ export default function EscalasPage() {
                 </div>
               </div>
 
-              <SheetFooter className="mt-6">
+              <SheetFooter className="mt-4 pt-4 border-t shrink-0">
                 <Button variant="outline" onClick={() => setIsSheetOpen(false)}>
                   Cancelar
                 </Button>
