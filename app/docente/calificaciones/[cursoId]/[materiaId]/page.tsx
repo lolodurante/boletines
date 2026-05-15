@@ -149,7 +149,6 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
 
   const [specialValues, setSpecialValues] = useState<Record<string, string>>({})
   const [numericGrades, setNumericGrades] = useState<Record<string, string>>({})
-  const [generalObservation, setGeneralObservation] = useState("")
   const [lastSaved, setLastSaved] = useState<Date | null>(null)
   const [isDirty, setIsDirty] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -164,7 +163,6 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     setGrades(buildInitialGrades(students, criteria, existingEvaluations))
     setSpecialValues(buildInitialSpecialValues(existingEvaluations))
     setNumericGrades(buildInitialNumericGrades(existingEvaluations))
-    setGeneralObservation(existingEvaluations.find((evaluation) => evaluation.observation)?.observation ?? "")
     setIsDirty(false)
     setAutoSaveBlocked(false)
   }, [criteria, criteriaKey, existingEvaluations, gradeSourceKey, studentKey, students])
@@ -195,7 +193,6 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
       courseId: cursoId,
       subjectId: materiaId,
       periodId: activePeriod.id,
-      generalObservation,
       submit,
       specialValues,
       numericGrades: Object.fromEntries(
@@ -233,7 +230,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     setIsDirty(false)
     setAutoSaveBlocked(false)
     return true
-  }, [activePeriod, canEdit, cursoId, generalObservation, grades, materiaId, numericGrades, setAutoSaveBlocked, setIsDirty, specialValues])
+  }, [activePeriod, canEdit, cursoId, grades, materiaId, numericGrades, setAutoSaveBlocked, setIsDirty, specialValues])
 
   // Calculate completion stats (must be before the auto-save effect that reads isComplete)
   const totalCells =
@@ -368,7 +365,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                   })}
                   {subject.hasNumericGrade && (
                     <div className="space-y-1.5">
-                      <p className="text-sm text-muted-foreground">Nota</p>
+                      <p className="text-sm text-muted-foreground">{isQualitative ? "Nota Conceptual" : "Nota"}</p>
                       {isQualitative ? (
                         <Select
                           value={numericGrades[student.id] ?? ""}
@@ -444,7 +441,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                   ))}
                   {subject.hasNumericGrade && (
                     <th className="border-b px-4 py-3 text-center text-sm font-medium text-muted-foreground min-w-[120px]">
-                      Nota
+                      {isQualitative ? "Nota Conceptual" : "Nota"}
                     </th>
                   )}
                 </tr>
@@ -572,31 +569,6 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
               </div>
             ))}
           </div>
-        </CardContent>
-      </Card>
-      )}
-
-      {/* General Observation */}
-      {entryKind === "ACADEMIC" && (
-      <Card>
-        <CardHeader>
-          <CardTitle>Observacion general del docente</CardTitle>
-          <CardDescription>
-            Esta observacion se aplicara a todos los alumnos de este curso y materia
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Textarea
-            placeholder="Observaciones generales sobre el grupo..."
-            value={generalObservation}
-            onChange={(e) => {
-              setGeneralObservation(e.target.value)
-              setIsDirty(true)
-              setAutoSaveBlocked(false)
-            }}
-            disabled={!canEdit}
-            className="min-h-[120px]"
-          />
         </CardContent>
       </Card>
       )}

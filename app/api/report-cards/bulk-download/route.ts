@@ -21,12 +21,27 @@ async function generateMissingPdf(reportCard: {
   student: { firstName: string; lastName: string; grade: string; division: string }
   period: { name: string }
 }) {
+  const courseAssignments = await prisma.courseAssignment.findMany({
+    where: {
+      grade: reportCard.student.grade,
+      division: reportCard.student.division,
+      periodId: reportCard.periodId,
+      subject: { active: true, type: reportCard.type },
+    },
+    select: { teacherId: true, subjectId: true },
+  })
+  if (courseAssignments.length === 0) return null
+
   const evaluations = await prisma.evaluation.findMany({
     where: {
       studentId: reportCard.studentId,
       periodId: reportCard.periodId,
       status: { in: ["SUBMITTED", "APPROVED"] },
       subject: { active: true, type: reportCard.type },
+      OR: courseAssignments.map((assignment) => ({
+        teacherId: assignment.teacherId,
+        subjectId: assignment.subjectId,
+      })),
     },
     include: {
       teacher: { include: { user: true } },
@@ -35,12 +50,18 @@ async function generateMissingPdf(reportCard: {
         where: { criterion: { active: true } },
         include: { criterion: true, scaleLevel: true },
       },
+      adaptedGrades: {
+        where: { adaptedCriterion: { active: true } },
+        include: { adaptedCriterion: true, scaleLevel: true },
+      },
     },
     orderBy: [{ subject: { order: "asc" } }],
   })
 
   const evaluationsWithGrades = evaluations.filter(
-    (evaluation) => evaluation.subject.entryKind === "ACADEMIC" && evaluation.grades.length > 0,
+    (evaluation) =>
+      evaluation.subject.entryKind === "ACADEMIC" &&
+      (evaluation.grades.length > 0 || evaluation.adaptedGrades.length > 0),
   )
   if (evaluationsWithGrades.length === 0) return null
 
@@ -48,11 +69,8 @@ async function generateMissingPdf(reportCard: {
     (evaluation) => evaluation.subject.entryKind === "ABSENCES" && evaluation.specialValue,
   )
   const commentEvaluations = evaluations.filter((evaluation) => {
-    const value = evaluation.subject.entryKind === "TEACHER_OBSERVATION"
-      ? evaluation.generalObservation || evaluation.specialValue
-      : evaluation.generalObservation
-
-    return Boolean(value)
+    if (evaluation.subject.entryKind !== "TEACHER_OBSERVATION") return false
+    return Boolean(evaluation.generalObservation || evaluation.specialValue)
   })
 
   const pdf = await generateReportCardPdf({
@@ -66,10 +84,16 @@ async function generateMissingPdf(reportCard: {
       subjectName: evaluation.subject.name,
       teacherName: evaluation.teacher.user.name,
       numericGrade: evaluation.subject.hasNumericGrade ? evaluation.numericGrade ?? undefined : undefined,
-      criteria: evaluation.grades.map((grade) => ({
-        name: grade.criterion.name,
-        gradeLabel: grade.scaleLevel.label,
-      })),
+      criteria:
+        evaluation.grades.length > 0
+          ? evaluation.grades.map((grade) => ({
+              name: grade.criterion.name,
+              gradeLabel: grade.scaleLevel.label,
+            }))
+          : evaluation.adaptedGrades.map((grade) => ({
+              name: grade.adaptedCriterion.name,
+              gradeLabel: grade.scaleLevel.label,
+            })),
     })),
     absences:
       absenceEvaluations.length > 0

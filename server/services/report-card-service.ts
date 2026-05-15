@@ -28,9 +28,8 @@ export function isReportCardReady(input: {
   )
 }
 
-export function blockIfMissingEmail(reportCard: ReportCard, student: Student): ReportCard {
-  if (student.familyEmail) return reportCard
-  return { ...reportCard, status: "BLOCKED_MISSING_EMAIL" }
+export function blockIfMissingEmail(reportCard: ReportCard, _student: Student): ReportCard {
+  return reportCard
 }
 
 export function approveReportCard(reportCard: ReportCard, directorObservation?: string): ReportCard {

@@ -32,8 +32,12 @@ export function getAssignmentStudents(data: PlatformData, assignment: Pick<Cours
 export function getAssignmentProgress(data: PlatformData, assignment: CourseAssignment) {
   const students = getAssignmentStudents(data, assignment)
   const evaluations = getAssignmentEvaluations(data, assignment)
+  const studentIds = new Set(students.map((student) => student.id))
   const completedStudentIds = new Set(
-    evaluations.filter(isCompletedEvaluation).map((evaluation) => evaluation.studentId),
+    evaluations
+      .filter((evaluation) => studentIds.has(evaluation.studentId))
+      .filter(isCompletedEvaluation)
+      .map((evaluation) => evaluation.studentId),
   )
   const studentCount =
     students.length || data.courses.find((course) => course.id === assignment.courseId)?.studentCount || 0

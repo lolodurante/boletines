@@ -25,6 +25,12 @@ export async function getDirectorTeacherConfigData() {
       orderBy: [{ order: "asc" }, { name: "asc" }],
     }),
     prisma.teacher.findMany({
+      where: {
+        user: {
+          role: "TEACHER",
+          status: "ACTIVE",
+        },
+      },
       select: {
         id: true,
         user: { select: { name: true, email: true, status: true } },

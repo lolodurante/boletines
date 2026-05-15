@@ -118,23 +118,42 @@ export async function getDirectorReportCardDetail(reportCardId: string) {
   })
   if (!reportCard) return null
 
-  const evaluations = await prisma.evaluation.findMany({
+  const courseAssignments = await prisma.courseAssignment.findMany({
     where: {
-      studentId: reportCard.studentId,
+      grade: reportCard.student.grade,
+      division: reportCard.student.division,
       periodId: reportCard.periodId,
-      status: { in: ["SUBMITTED", "APPROVED"] },
       subject: { active: true, type: reportCard.type },
     },
-    include: {
-      teacher: { include: { user: true } },
-      subject: true,
-      grades: {
-        where: { criterion: { active: true } },
-        include: { criterion: true, scaleLevel: true },
-      },
-    },
-    orderBy: [{ subject: { order: "asc" } }],
+    select: { teacherId: true, subjectId: true },
   })
+  const evaluations = courseAssignments.length > 0
+    ? await prisma.evaluation.findMany({
+        where: {
+          studentId: reportCard.studentId,
+          periodId: reportCard.periodId,
+          status: { in: ["SUBMITTED", "APPROVED"] },
+          subject: { active: true, type: reportCard.type },
+          OR: courseAssignments.map((assignment) => ({
+            teacherId: assignment.teacherId,
+            subjectId: assignment.subjectId,
+          })),
+        },
+        include: {
+          teacher: { include: { user: true } },
+          subject: true,
+          grades: {
+            where: { criterion: { active: true } },
+            include: { criterion: true, scaleLevel: true },
+          },
+          adaptedGrades: {
+            where: { adaptedCriterion: { active: true } },
+            include: { adaptedCriterion: true, scaleLevel: true },
+          },
+        },
+        orderBy: [{ subject: { order: "asc" } }],
+      })
+    : []
   const printableEvaluations = evaluations.filter(
     (evaluation) => evaluation.subject.entryKind !== "TEACHER_OBSERVATION",
   )
@@ -159,11 +178,17 @@ export async function getDirectorReportCardDetail(reportCardId: string) {
       subjectName: evaluation.subject.name,
       teacherId: evaluation.teacherId,
       teacherName: evaluation.teacher.user.name,
-      criteria: evaluation.grades.map((grade) => ({
-        name: grade.criterion.name,
-        grade: grade.scaleLevel.label as GradeLevel,
-      })),
-      observation: evaluation.generalObservation ?? undefined,
+      criteria:
+        evaluation.grades.length > 0
+          ? evaluation.grades.map((grade) => ({
+              name: grade.criterion.name,
+              grade: grade.scaleLevel.label as GradeLevel,
+            }))
+          : evaluation.adaptedGrades.map((grade) => ({
+              name: grade.adaptedCriterion.name,
+              grade: grade.scaleLevel.label as GradeLevel,
+            })),
+      observation: undefined,
       specialValue: evaluation.specialValue ?? undefined,
       numericGrade: evaluation.numericGrade ?? undefined,
     })),

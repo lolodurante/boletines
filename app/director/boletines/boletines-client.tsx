@@ -42,7 +42,11 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import type { GradeLevel } from "@/lib/data"
+import {
+  QUALITATIVE_GRADE_LABELS,
+  usesQualitativeGrade,
+  type GradeLevel,
+} from "@/lib/data"
 import { useEffect } from "react"
 
 interface ReportCardListItem {
@@ -83,6 +87,23 @@ export interface ReportCardListData {
 
 function getReportTypeLabel(reportType: ReportCardData["reportType"]) {
   return reportType === "INGLES" ? "Inglés" : "Español"
+}
+
+function getGradeFromCourseId(courseId: string) {
+  const match = /^c(.+)[a-z]$/i.exec(courseId)
+  return match?.[1] ?? courseId
+}
+
+function formatNumericGrade(report: ReportCardData, numericGrade: number) {
+  const grade = getGradeFromCourseId(report.courseId)
+  if (!usesQualitativeGrade(grade)) {
+    return { label: "Nota", value: String(numericGrade) }
+  }
+
+  return {
+    label: "Nota conceptual",
+    value: QUALITATIVE_GRADE_LABELS[numericGrade] ?? String(numericGrade),
+  }
 }
 
 interface Props {
@@ -499,7 +520,8 @@ export function BoletinesClient({ initialData }: Props) {
                           ) : null}
                           {typeof subject.numericGrade === "number" && (
                             <div className="rounded-md border p-2 text-sm font-medium">
-                              Nota: {subject.numericGrade}
+                              {formatNumericGrade(selectedReport, subject.numericGrade).label}:{" "}
+                              {formatNumericGrade(selectedReport, subject.numericGrade).value}
                             </div>
                           )}
                         </div>

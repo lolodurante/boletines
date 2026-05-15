@@ -30,7 +30,7 @@ export async function getDirectorTeacherProgressData(filters: TeacherProgressFil
       orderBy: [{ grade: "asc" }, { division: "asc" }],
     }),
     prisma.student.findMany({
-      where: { status: "ACTIVE", isAdapted: false },
+      where: { status: "ACTIVE" },
       select: { id: true, grade: true, division: true },
     }),
   ])

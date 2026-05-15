@@ -47,6 +47,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
           subject: true,
           period: true,
           grades: { include: { criterion: true, scaleLevel: true } },
+          adaptedGrades: { include: { adaptedCriterion: true, scaleLevel: true } },
         },
         orderBy: { updatedAt: "desc" },
       }),
@@ -79,6 +80,7 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       courseId: courseIdFromParts(student.grade, student.division),
       parentEmail: student.familyEmail,
     }))
+    const mappedAllStudents = [...mappedStudents, ...mappedAdaptedStudents]
     const activeCourseRecords = courses.length > 0
       ? courses
       : Array.from(
@@ -128,6 +130,12 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       subjectId: assignment.subjectId,
       periodId: assignment.periodId,
     }))
+    const assignmentKey = (assignment: {
+      teacherId: string
+      subjectId: string
+      periodId: string
+      courseId: string
+    }) => `${assignment.teacherId}:${assignment.subjectId}:${assignment.periodId}:${assignment.courseId}`
     const mapReportStatus = (status: string): ReportStatus => {
       if (status === "NOT_READY") return "No listo"
       if (status === "READY_FOR_REVIEW") return "Listo para revisión"
@@ -164,16 +172,19 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       status: mapEvaluationStatus(evaluation.status),
       lastUpdated: evaluation.updatedAt.toLocaleDateString("es-AR"),
       grades: Object.fromEntries(
-        evaluation.grades.map((grade) => [grade.criterion.name, grade.scaleLevel.label as GradeLevel]),
+        evaluation.grades.length > 0
+          ? evaluation.grades.map((grade) => [grade.criterion.name, grade.scaleLevel.label as GradeLevel])
+          : evaluation.adaptedGrades.map((grade) => [grade.adaptedCriterion.name, grade.scaleLevel.label as GradeLevel]),
       ),
-      observation: evaluation.generalObservation ?? undefined,
+      observation:
+        evaluation.subject.entryKind === "TEACHER_OBSERVATION" ? evaluation.generalObservation ?? undefined : undefined,
       specialValue: evaluation.specialValue ?? undefined,
       numericGrade: evaluation.numericGrade ?? undefined,
     }))
     const directorEvaluationRows: PlatformData["directorEvaluationRows"] = mappedEvaluations.map((evaluation) => ({
       id: evaluation.id,
       studentId: evaluation.studentId,
-      studentName: mappedStudents.find((student) => student.id === evaluation.studentId)?.name ?? "Desconocido",
+      studentName: mappedAllStudents.find((student) => student.id === evaluation.studentId)?.name ?? "Desconocido",
       courseId: evaluation.courseId,
       courseName: mappedCourses.find((course) => course.id === evaluation.courseId)?.name ?? "—",
       teacherId: evaluation.teacherId,
@@ -185,12 +196,23 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
       grades: evaluation.grades,
     }))
     const directorReportCards: PlatformData["directorReportCards"] = mappedReportCards.map((reportCard) => {
-      const student = mappedStudents.find((item) => item.id === reportCard.studentId)
+      const student = mappedAllStudents.find((item) => item.id === reportCard.studentId)
       const period = mappedPeriods.find((item) => item.id === reportCard.periodId)
+      const activeAssignmentKeys = new Set(
+        mappedAssignments
+          .filter(
+            (assignment) =>
+              assignment.courseId === student?.courseId &&
+              assignment.periodId === reportCard.periodId &&
+              mappedSubjects.find((subject) => subject.id === assignment.subjectId)?.reportType === reportCard.reportType,
+          )
+          .map(assignmentKey),
+      )
       const relatedEvaluations = mappedEvaluations.filter(
         (evaluation) =>
           evaluation.studentId === reportCard.studentId &&
           evaluation.periodId === reportCard.periodId &&
+          activeAssignmentKeys.has(assignmentKey(evaluation)) &&
           mappedSubjects.find((subject) => subject.id === evaluation.subjectId)?.reportType === reportCard.reportType,
       )
       const printableEvaluations = relatedEvaluations.filter(
@@ -218,14 +240,14 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
           teacherId: evaluation.teacherId,
           teacherName: mappedTeachers.find((teacher) => teacher.id === evaluation.teacherId)?.name ?? "—",
           criteria: Object.entries(evaluation.grades).map(([name, grade]) => ({ name, grade })),
-          observation: evaluation.observation,
+          observation: undefined,
           specialValue: evaluation.specialValue,
           numericGrade: evaluation.numericGrade,
         })),
       }
     })
     const reportHistory: PlatformData["reportHistory"] = mappedReportCards.map((reportCard) => {
-      const student = mappedStudents.find((item) => item.id === reportCard.studentId)
+      const student = mappedAllStudents.find((item) => item.id === reportCard.studentId)
       return {
         id: reportCard.id,
         studentId: reportCard.studentId,
@@ -291,13 +313,14 @@ export async function getPlatformData(authUser?: CurrentAuthUser): Promise<Platf
     const filteredAssignments = isTeacherUser && authUser?.teacherId
       ? mappedAssignments.filter((assignment) => assignment.teacherId === authUser.teacherId)
       : mappedAssignments
+    const filteredAssignmentKeys = new Set(filteredAssignments.map(assignmentKey))
     const filteredEvaluations = isTeacherUser && authUser?.teacherId
-      ? mappedEvaluations.filter((evaluation) => evaluation.teacherId === authUser.teacherId)
+      ? mappedEvaluations.filter((evaluation) => filteredAssignmentKeys.has(assignmentKey(evaluation)))
       : mappedEvaluations
     const teacherCourseIds = new Set(filteredAssignments.map((assignment) => assignment.courseId))
     const teacherSubjectIds = new Set(filteredAssignments.map((assignment) => assignment.subjectId))
     const teacherStudentIds = new Set(
-      mappedStudents.filter((student) => teacherCourseIds.has(student.courseId)).map((student) => student.id),
+      mappedAllStudents.filter((student) => teacherCourseIds.has(student.courseId)).map((student) => student.id),
     )
     const scopedStudents = isTeacherUser
       ? mappedStudents.filter((student) => teacherStudentIds.has(student.id))

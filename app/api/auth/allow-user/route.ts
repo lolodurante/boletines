@@ -33,8 +33,81 @@ export async function POST(request: Request) {
   return NextResponse.json({ ok: true, status: "allowed", userId: user.id })
 }
 
-async function syncTeacherRecord(user: { id: string; role: "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA" }) {
-  if (user.role !== "TEACHER") return
+type ManagedUserRole = "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA"
+
+function assignmentKey(input: { teacherId: string; subjectId: string; periodId: string; grade: string; division: string }) {
+  return `${input.teacherId}:${input.subjectId}:${input.periodId}:${input.grade}:${input.division}`
+}
+
+async function removeOpenAssignmentsWithoutEvaluations(userId: string) {
+  const teacher = await prisma.teacher.findUnique({
+    where: { userId },
+    select: { id: true },
+  })
+  if (!teacher) return
+
+  const assignments = await prisma.courseAssignment.findMany({
+    where: {
+      teacherId: teacher.id,
+      period: { status: { in: ["DRAFT", "ACTIVE"] } },
+    },
+    select: {
+      id: true,
+      teacherId: true,
+      subjectId: true,
+      periodId: true,
+      grade: true,
+      division: true,
+    },
+  })
+  if (assignments.length === 0) return
+
+  const evaluations = await prisma.evaluation.findMany({
+    where: {
+      OR: assignments.map((assignment) => ({
+        teacherId: assignment.teacherId,
+        subjectId: assignment.subjectId,
+        periodId: assignment.periodId,
+        student: {
+          grade: assignment.grade,
+          division: assignment.division,
+        },
+      })),
+    },
+    select: {
+      teacherId: true,
+      subjectId: true,
+      periodId: true,
+      student: { select: { grade: true, division: true } },
+    },
+  })
+  const assignmentsWithEvaluations = new Set(
+    evaluations.map((evaluation) =>
+      assignmentKey({
+        teacherId: evaluation.teacherId,
+        subjectId: evaluation.subjectId,
+        periodId: evaluation.periodId,
+        grade: evaluation.student.grade,
+        division: evaluation.student.division,
+      }),
+    ),
+  )
+  const assignmentIdsToRemove = assignments
+    .filter((assignment) => !assignmentsWithEvaluations.has(assignmentKey(assignment)))
+    .map((assignment) => assignment.id)
+
+  if (assignmentIdsToRemove.length === 0) return
+
+  await prisma.courseAssignment.deleteMany({
+    where: { id: { in: assignmentIdsToRemove } },
+  })
+}
+
+async function syncTeacherAccess(user: { id: string; role: ManagedUserRole }) {
+  if (user.role !== "TEACHER") {
+    await removeOpenAssignmentsWithoutEvaluations(user.id)
+    return
+  }
 
   await prisma.teacher.upsert({
     where: { userId: user.id },
@@ -43,7 +116,7 @@ async function syncTeacherRecord(user: { id: string; role: "TEACHER" | "DIRECTOR
   })
 }
 
-async function activateExistingUser(userId: string, actorRole: "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA") {
+async function activateExistingUser(userId: string, actorRole: ManagedUserRole) {
   const user = await prisma.user.findUnique({ where: { id: userId } })
   if (!user) return null
   if (user.role === "ADMIN" && actorRole !== "ADMIN") return "forbidden" as const
@@ -53,14 +126,14 @@ async function activateExistingUser(userId: string, actorRole: "TEACHER" | "DIRE
     data: { status: "ACTIVE" },
   })
 
-  await syncTeacherRecord(activeUser)
+  await syncTeacherAccess(activeUser)
 
   return activeUser
 }
 
 async function saveAllowedUser(
   input: { email: string; name: string; role: "TEACHER" | "DIRECTOR" | "PSICOPEDAGOGA" },
-  actorRole: "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA",
+  actorRole: ManagedUserRole,
 ) {
   const existingUser = await prisma.user.findFirst({
     where: { email: { equals: input.email, mode: "insensitive" } },
@@ -86,7 +159,7 @@ async function saveAllowedUser(
         },
       })
 
-  await syncTeacherRecord(user)
+  await syncTeacherAccess(user)
 
   return user
 }

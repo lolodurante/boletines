@@ -391,10 +391,19 @@ function createPdfBuffer(data: ReportCardPdfData) {
       page = ensureSpace(pages, 32, data, levelLabels, logo)
       const gradeNum = parseInt(data.student.grade.charAt(0))
       const qualitativeLabels: Record<number, string> = { 1: "Desaprobado", 2: "Regular", 3: "Bueno", 4: "Muy Bueno", 5: "Sobresaliente" }
-      const gradeDisplay = gradeNum <= 3 && subject.numericGrade in qualitativeLabels
+      const isQualitative = gradeNum <= 3 && subject.numericGrade in qualitativeLabels
+      const gradeDisplay = isQualitative
         ? qualitativeLabels[subject.numericGrade]!
         : String(subject.numericGrade)
-      addObservationRow(page, "Nota", gradeDisplay)
+      if (isQualitative) {
+        const label = `Nota conceptual: ${gradeDisplay}`
+        const rowHeight = Math.max(20, wrapText(label, CONTENT_WIDTH - 12, 9).length * 12 + 8)
+        page = ensureSpace(pages, rowHeight, data, levelLabels, logo)
+        addWrappedText(page, label, MARGIN + 6, page.y - 12, CONTENT_WIDTH - 12, { size: 9 })
+        page.y -= rowHeight
+      } else {
+        addObservationRow(page, "Nota", gradeDisplay)
+      }
     }
   }
 

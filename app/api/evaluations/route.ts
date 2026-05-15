@@ -37,6 +37,31 @@ function courseParts(courseId: string) {
   }
 }
 
+async function findScaleLevelsForCourse(grade: string, requestedLabels: string[]) {
+  const gradeNumber = Number.parseInt(grade.replace("°", ""), 10)
+  if (!Number.isFinite(gradeNumber) || requestedLabels.length === 0) return new Map<string, string>()
+
+  const scale = await prisma.gradingScale.findFirst({
+    where: {
+      gradeFrom: { lte: gradeNumber },
+      gradeTo: { gte: gradeNumber },
+    },
+    select: { id: true },
+    orderBy: { gradeFrom: "desc" },
+  })
+  if (!scale) return null
+
+  const levels = await prisma.gradingScaleLevel.findMany({
+    where: {
+      gradingScaleId: scale.id,
+      label: { in: requestedLabels },
+    },
+    select: { id: true, label: true },
+  })
+
+  return new Map(levels.map((level) => [level.label, level.id]))
+}
+
 async function updateReadyReportCards(
   tx: Prisma.TransactionClient,
   input: {
@@ -301,11 +326,10 @@ export async function POST(request: Request) {
     const requestedLabels = Array.from(
       new Set(input.grades.map((grade) => grade.grade).filter((grade) => grade !== "No evaluado")),
     )
-    const scaleLevels = await prisma.gradingScaleLevel.findMany({
-      where: { label: { in: requestedLabels } },
-      select: { id: true, label: true },
-    })
-    const scaleLevelByLabel = new Map(scaleLevels.map((level) => [level.label, level.id]))
+    const scaleLevelByLabel = await findScaleLevelsForCourse(course.grade, requestedLabels)
+    if (!scaleLevelByLabel) {
+      return NextResponse.json({ error: "No hay escala configurada para este grado" }, { status: 400 })
+    }
     const missingLabels = requestedLabels.filter((label) => !scaleLevelByLabel.has(label))
     if (missingLabels.length > 0) {
       return NextResponse.json(
@@ -347,14 +371,14 @@ export async function POST(request: Request) {
               periodId: input.periodId,
               status,
               submittedAt,
-              generalObservation: input.generalObservation?.trim() || null,
+              generalObservation: null,
               specialValue: null,
               numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },
             update: {
               status,
               submittedAt,
-              generalObservation: input.generalObservation?.trim() || null,
+              generalObservation: null,
               specialValue: null,
               numericGrade: subject.hasNumericGrade ? input.numericGrades?.[studentId] ?? null : null,
             },

@@ -6,8 +6,11 @@ const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   update: vi.fn(),
   create: vi.fn(),
+  teacherFindUnique: vi.fn(),
   teacherUpsert: vi.fn(),
-  teacherDeleteMany: vi.fn(),
+  assignmentFindMany: vi.fn(),
+  assignmentDeleteMany: vi.fn(),
+  evaluationFindMany: vi.fn(),
 }))
 
 vi.mock("@/lib/auth/current-user", () => ({
@@ -26,8 +29,15 @@ vi.mock("@/lib/db/client", () => ({
       create: mocks.create,
     },
     teacher: {
+      findUnique: mocks.teacherFindUnique,
       upsert: mocks.teacherUpsert,
-      deleteMany: mocks.teacherDeleteMany,
+    },
+    courseAssignment: {
+      findMany: mocks.assignmentFindMany,
+      deleteMany: mocks.assignmentDeleteMany,
+    },
+    evaluation: {
+      findMany: mocks.evaluationFindMany,
     },
   },
 }))
@@ -59,7 +69,7 @@ describe("allow-user route", () => {
     expect(response.status).toBe(403)
     expect(mocks.update).not.toHaveBeenCalled()
     expect(mocks.teacherUpsert).not.toHaveBeenCalled()
-    expect(mocks.teacherDeleteMany).not.toHaveBeenCalled()
+    expect(mocks.assignmentDeleteMany).not.toHaveBeenCalled()
   })
 
   it("prevents directors from overwriting administrator users by email", async () => {
@@ -82,7 +92,7 @@ describe("allow-user route", () => {
     expect(mocks.create).not.toHaveBeenCalled()
   })
 
-  it("removes stale teacher records when a user is changed to a non-teacher role", async () => {
+  it("keeps teacher history and removes only open empty assignments when a user changes to a non-teacher role", async () => {
     mocks.findFirst.mockResolvedValue({
       id: "user-1",
       email: "persona@labarden.edu.ar",
@@ -93,6 +103,33 @@ describe("allow-user route", () => {
       id: "user-1",
       role: "DIRECTOR",
     })
+    mocks.teacherFindUnique.mockResolvedValue({ id: "teacher-1" })
+    mocks.assignmentFindMany.mockResolvedValue([
+      {
+        id: "assignment-empty",
+        teacherId: "teacher-1",
+        subjectId: "subject-1",
+        periodId: "period-active",
+        grade: "3",
+        division: "A",
+      },
+      {
+        id: "assignment-with-evaluation",
+        teacherId: "teacher-1",
+        subjectId: "subject-2",
+        periodId: "period-active",
+        grade: "3",
+        division: "A",
+      },
+    ])
+    mocks.evaluationFindMany.mockResolvedValue([
+      {
+        teacherId: "teacher-1",
+        subjectId: "subject-2",
+        periodId: "period-active",
+        student: { grade: "3", division: "A" },
+      },
+    ])
 
     const { POST } = await import("@/app/api/auth/allow-user/route")
     const response = await POST(post({
@@ -102,7 +139,27 @@ describe("allow-user route", () => {
     }))
 
     expect(response.status).toBe(200)
-    expect(mocks.teacherDeleteMany).toHaveBeenCalledWith({ where: { userId: "user-1" } })
     expect(mocks.teacherUpsert).not.toHaveBeenCalled()
+    expect(mocks.teacherFindUnique).toHaveBeenCalledWith({
+      where: { userId: "user-1" },
+      select: { id: true },
+    })
+    expect(mocks.assignmentFindMany).toHaveBeenCalledWith({
+      where: {
+        teacherId: "teacher-1",
+        period: { status: { in: ["DRAFT", "ACTIVE"] } },
+      },
+      select: {
+        id: true,
+        teacherId: true,
+        subjectId: true,
+        periodId: true,
+        grade: true,
+        division: true,
+      },
+    })
+    expect(mocks.assignmentDeleteMany).toHaveBeenCalledWith({
+      where: { id: { in: ["assignment-empty"] } },
+    })
   })
 })

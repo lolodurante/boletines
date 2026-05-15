@@ -47,6 +47,31 @@ function colorForLabel(label: string) {
   return "bg-muted"
 }
 
+async function deleteScaleIfUnused(id: string) {
+  const scale = await prisma.gradingScale.findUnique({
+    where: { id },
+    select: {
+      levels: { select: { id: true } },
+    },
+  })
+
+  if (!scale) return
+
+  const levelIds = scale.levels.map((level) => level.id)
+  if (levelIds.length > 0) {
+    const [referenced, referencedAdapted] = await Promise.all([
+      prisma.evaluationGrade.count({ where: { scaleLevelId: { in: levelIds } } }),
+      prisma.adaptedEvaluationGrade.count({ where: { scaleLevelId: { in: levelIds } } }),
+    ])
+
+    if (referenced + referencedAdapted > 0) {
+      throw new Error("SCALE_IN_USE")
+    }
+  }
+
+  await prisma.gradingScale.delete({ where: { id } })
+}
+
 export async function GET() {
   const auth = await requireApiDirectorOrAdmin()
   if (auth.response) return auth.response
@@ -83,7 +108,7 @@ export async function POST(request: Request) {
   try {
     if (parsed.data.action === "delete") {
       if (isUuid(parsed.data.id)) {
-        await prisma.gradingScale.delete({ where: { id: parsed.data.id } })
+        await deleteScaleIfUnused(parsed.data.id)
       }
       return NextResponse.json({ ok: true, persisted: true })
     }
@@ -158,6 +183,12 @@ export async function POST(request: Request) {
     if (message === "LEVEL_IN_USE") {
       return NextResponse.json(
         { error: "No se pueden eliminar niveles que ya tienen calificaciones asignadas" },
+        { status: 409 },
+      )
+    }
+    if (message === "SCALE_IN_USE") {
+      return NextResponse.json(
+        { error: "No se puede eliminar una escala que ya tiene calificaciones asignadas" },
         { status: 409 },
       )
     }

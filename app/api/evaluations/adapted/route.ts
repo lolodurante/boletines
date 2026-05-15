@@ -5,6 +5,7 @@ import { logWarning } from "@/lib/logger"
 import { requireApiTeacher } from "@/lib/auth/current-user"
 import { teacherOwnsAssignment } from "@/lib/auth/assignment-guards"
 import { coursePartsFromId } from "@/lib/academic-course"
+import type { Prisma } from "@prisma/client"
 
 export const dynamic = "force-dynamic"
 
@@ -25,6 +26,96 @@ const adaptedEvaluationSchema = z.object({
   observations: z.record(z.string(), z.string()).optional(),
   numericGrades: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
 })
+
+async function findScaleLevelsForCourse(grade: string, requestedLabels: string[]) {
+  const gradeNumber = Number.parseInt(grade.replace("°", ""), 10)
+  if (!Number.isFinite(gradeNumber) || requestedLabels.length === 0) return new Map<string, string>()
+
+  const scale = await prisma.gradingScale.findFirst({
+    where: {
+      gradeFrom: { lte: gradeNumber },
+      gradeTo: { gte: gradeNumber },
+    },
+    select: { id: true },
+    orderBy: { gradeFrom: "desc" },
+  })
+  if (!scale) return null
+
+  const levels = await prisma.gradingScaleLevel.findMany({
+    where: {
+      gradingScaleId: scale.id,
+      label: { in: requestedLabels },
+    },
+    select: { id: true, label: true },
+  })
+
+  return new Map(levels.map((level) => [level.label, level.id]))
+}
+
+async function updateReadyReportCards(
+  tx: Prisma.TransactionClient,
+  input: {
+    course: { grade: string; division: string }
+    periodId: string
+    studentIds: string[]
+  },
+) {
+  const allAssignments = await tx.courseAssignment.findMany({
+    where: {
+      grade: input.course.grade,
+      division: input.course.division,
+      periodId: input.periodId,
+      subject: { active: true },
+    },
+    select: { teacherId: true, subjectId: true, subject: { select: { type: true } } },
+  })
+  if (allAssignments.length === 0) return
+
+  const submittedEvals = await tx.evaluation.findMany({
+    where: {
+      studentId: { in: input.studentIds },
+      periodId: input.periodId,
+      status: { in: ["SUBMITTED", "APPROVED"] },
+    },
+    select: { studentId: true, teacherId: true, subjectId: true },
+  })
+
+  const reportTypes = Array.from(new Set(allAssignments.map((assignment) => assignment.subject.type)))
+  for (const reportType of reportTypes) {
+    const requiredAssignments = allAssignments.filter((assignment) => assignment.subject.type === reportType)
+    const completeStudentIds = input.studentIds.filter((studentId) =>
+      requiredAssignments.every((assignment) =>
+        submittedEvals.some(
+          (evaluation) =>
+            evaluation.studentId === studentId &&
+            evaluation.teacherId === assignment.teacherId &&
+            evaluation.subjectId === assignment.subjectId,
+        ),
+      ),
+    )
+
+    for (const studentId of completeStudentIds) {
+      const updated = await tx.reportCard.updateMany({
+        where: {
+          studentId,
+          periodId: input.periodId,
+          type: reportType,
+          status: { in: ["NOT_READY", "NEEDS_REVISION"] },
+        },
+        data: { status: "READY_FOR_REVIEW" },
+      })
+      if (updated.count === 0) {
+        try {
+          await tx.reportCard.create({
+            data: { studentId, periodId: input.periodId, type: reportType, status: "READY_FOR_REVIEW" },
+          })
+        } catch {
+          // ReportCard already exists in a later state.
+        }
+      }
+    }
+  }
+}
 
 export async function GET(request: Request) {
   const auth = await requireApiTeacher()
@@ -188,11 +279,17 @@ export async function POST(request: Request) {
     const requestedLabels = Array.from(
       new Set(input.grades.map((g) => g.grade).filter((g) => g !== "No evaluado")),
     )
-    const scaleLevels = await prisma.gradingScaleLevel.findMany({
-      where: { label: { in: requestedLabels } },
-      select: { id: true, label: true },
-    })
-    const scaleLevelByLabel = new Map(scaleLevels.map((l) => [l.label, l.id]))
+    const scaleLevelByLabel = await findScaleLevelsForCourse(course.grade, requestedLabels)
+    if (!scaleLevelByLabel) {
+      return NextResponse.json({ error: "No hay escala configurada para este grado" }, { status: 400 })
+    }
+    const missingLabels = requestedLabels.filter((label) => !scaleLevelByLabel.has(label))
+    if (missingLabels.length > 0) {
+      return NextResponse.json(
+        { error: `Faltan niveles de escala en la DB: ${missingLabels.join(", ")}` },
+        { status: 400 },
+      )
+    }
 
     const status = input.submit ? "SUBMITTED" : "DRAFT"
     const submittedAt = input.submit ? new Date() : null
@@ -261,6 +358,14 @@ export async function POST(request: Request) {
               update: { scaleLevelId },
             })
           }
+        }
+
+        if (input.submit) {
+          await updateReadyReportCards(tx, {
+            course,
+            periodId: input.periodId,
+            studentIds: Array.from(validStudentIds),
+          })
         }
       },
       { timeout: ADAPTED_EVALUATION_SAVE_TRANSACTION_TIMEOUT_MS },
