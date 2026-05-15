@@ -684,7 +684,7 @@ export default function MateriasPage() {
                     <Select
                       value={selectedSubject.reportType}
                       onValueChange={(v) => updateSubject({ reportType: v as Subject["reportType"] })}
-                      disabled={(selectedSubject.entryKind ?? "ACADEMIC") === "ABSENCES"}
+                      disabled={false}
                     >
                       <SelectTrigger className="h-9">
                         <SelectValue />
