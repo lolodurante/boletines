@@ -5,6 +5,7 @@ import { prisma } from "@/lib/db/client"
 import { logWarning } from "@/lib/logger"
 import { requireApiTeacher } from "@/lib/auth/current-user"
 import { teacherOwnsAssignment } from "@/lib/auth/assignment-guards"
+import { TEACHER_OBSERVATION_MAX_LENGTH } from "@/lib/evaluation-limits"
 
 export const dynamic = "force-dynamic"
 
@@ -14,9 +15,9 @@ const evaluationSaveSchema = z.object({
   courseId: z.string().min(1),
   subjectId: z.string().min(1),
   periodId: z.string().min(1),
-  generalObservation: z.string().optional(),
+  generalObservation: z.string().max(TEACHER_OBSERVATION_MAX_LENGTH).optional(),
   submit: z.boolean().optional(),
-  specialValues: z.record(z.string(), z.string()).optional(),
+  specialValues: z.record(z.string(), z.string().max(TEACHER_OBSERVATION_MAX_LENGTH)).optional(),
   numericGrades: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
   grades: z.array(
     z.object({

@@ -36,6 +36,7 @@ import {
   type GradeLevel,
 } from "@/lib/data"
 import { usePlatformData } from "@/lib/use-platform-data"
+import { TEACHER_OBSERVATION_MAX_LENGTH } from "@/lib/evaluation-limits"
 
 interface GradeEntryPageProps {
   params: Promise<{ cursoId: string; materiaId: string }>
@@ -552,20 +553,28 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
             {students.map((student) => (
               <div key={student.id} className="grid gap-2 p-3 md:grid-cols-[220px_1fr] md:items-start">
                 <div className="text-sm font-medium">{student.name}</div>
-                <Textarea
-                  placeholder={entryKind === "ABSENCES" ? "Ej: 0" : `Observación sobre ${student.name}...`}
-                  value={specialValues[student.id] || ""}
-                  onChange={(e) => {
-                    setSpecialValues(prev => ({
-                      ...prev,
-                      [student.id]: e.target.value
-                    }))
-                    setIsDirty(true)
-                    setAutoSaveBlocked(false)
-                  }}
-                  disabled={!canEdit}
-                  className={entryKind === "ABSENCES" ? "min-h-[42px]" : "min-h-[90px]"}
-                />
+                <div className="space-y-1">
+                  <Textarea
+                    placeholder={entryKind === "ABSENCES" ? "Ej: 0" : `Observación sobre ${student.name}...`}
+                    value={specialValues[student.id] || ""}
+                    onChange={(e) => {
+                      setSpecialValues(prev => ({
+                        ...prev,
+                        [student.id]: e.target.value
+                      }))
+                      setIsDirty(true)
+                      setAutoSaveBlocked(false)
+                    }}
+                    disabled={!canEdit}
+                    maxLength={entryKind === "TEACHER_OBSERVATION" ? TEACHER_OBSERVATION_MAX_LENGTH : undefined}
+                    className={entryKind === "ABSENCES" ? "min-h-[42px]" : "min-h-[90px]"}
+                  />
+                  {entryKind === "TEACHER_OBSERVATION" && (
+                    <div className="text-right text-xs text-muted-foreground">
+                      {(specialValues[student.id] || "").length}/{TEACHER_OBSERVATION_MAX_LENGTH}
+                    </div>
+                  )}
+                </div>
               </div>
             ))}
           </div>

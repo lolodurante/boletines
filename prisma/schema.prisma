@@ -136,7 +136,7 @@ model Teacher {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Restrict)
   assignments CourseAssignment[]
   evaluations Evaluation[]
 
@@ -178,7 +178,7 @@ model EvaluationCriterion {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  subject          Subject           @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  subject          Subject           @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   evaluationGrades EvaluationGrade[]
 
   @@index([subjectId])
@@ -197,8 +197,8 @@ model AdaptedCriterion {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  student          Student                  @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  subject          Subject                  @relation(fields: [subjectId], references: [id], onDelete: Cascade)
+  student          Student                  @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  subject          Subject                  @relation(fields: [subjectId], references: [id], onDelete: Restrict)
   evaluationGrades AdaptedEvaluationGrade[]
 
   @@index([studentId])
@@ -271,9 +271,9 @@ model CourseAssignment {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  teacher Teacher        @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  subject Subject        @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  period  AcademicPeriod @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  teacher Teacher        @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  subject Subject        @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  period  AcademicPeriod @relation(fields: [periodId], references: [id], onDelete: Restrict)
 
   @@unique([teacherId, subjectId, grade, division, periodId])
   @@index([teacherId])
@@ -299,10 +299,10 @@ model Evaluation {
   createdAt          DateTime         @default(now()) @map("created_at")
   updatedAt          DateTime         @updatedAt @map("updated_at")
 
-  student Student             @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  teacher Teacher             @relation(fields: [teacherId], references: [id], onDelete: Cascade)
-  subject Subject             @relation(fields: [subjectId], references: [id], onDelete: Cascade)
-  period  AcademicPeriod      @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  student Student             @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  teacher Teacher             @relation(fields: [teacherId], references: [id], onDelete: Restrict)
+  subject Subject             @relation(fields: [subjectId], references: [id], onDelete: Restrict)
+  period  AcademicPeriod      @relation(fields: [periodId], references: [id], onDelete: Restrict)
   grades         EvaluationGrade[]
   adaptedGrades  AdaptedEvaluationGrade[]
 
@@ -326,7 +326,7 @@ model EvaluationGrade {
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
 
-  evaluation Evaluation          @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation Evaluation          @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
   criterion  EvaluationCriterion @relation(fields: [criterionId], references: [id], onDelete: Restrict)
   scaleLevel GradingScaleLevel   @relation(fields: [scaleLevelId], references: [id], onDelete: Restrict)
 
@@ -346,7 +346,7 @@ model AdaptedEvaluationGrade {
   createdAt          DateTime @default(now()) @map("created_at")
   updatedAt          DateTime @updatedAt @map("updated_at")
 
-  evaluation       Evaluation        @relation(fields: [evaluationId], references: [id], onDelete: Cascade)
+  evaluation       Evaluation        @relation(fields: [evaluationId], references: [id], onDelete: Restrict)
   adaptedCriterion AdaptedCriterion  @relation(fields: [adaptedCriterionId], references: [id], onDelete: Restrict)
   scaleLevel       GradingScaleLevel @relation(fields: [scaleLevelId], references: [id], onDelete: Restrict)
 
@@ -369,8 +369,8 @@ model ReportCard {
   createdAt           DateTime         @default(now()) @map("created_at")
   updatedAt           DateTime         @updatedAt @map("updated_at")
 
-  student    Student          @relation(fields: [studentId], references: [id], onDelete: Cascade)
-  period     AcademicPeriod   @relation(fields: [periodId], references: [id], onDelete: Cascade)
+  student    Student          @relation(fields: [studentId], references: [id], onDelete: Restrict)
+  period     AcademicPeriod   @relation(fields: [periodId], references: [id], onDelete: Restrict)
   deliveries ReportDelivery[]
 
   @@unique([studentId, periodId, type])

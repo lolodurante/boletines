@@ -1,5 +1,6 @@
 import { z } from "zod"
 import { idSchema, isoDateSchema } from "./common"
+import { TEACHER_OBSERVATION_MAX_LENGTH } from "@/lib/evaluation-limits"
 
 export const evaluationStatusSchema = z.enum(["DRAFT", "SUBMITTED", "NEEDS_REVISION", "APPROVED"])
 
@@ -10,7 +11,7 @@ export const evaluationSchema = z.object({
   subjectId: idSchema,
   periodId: idSchema,
   status: evaluationStatusSchema,
-  generalObservation: z.string().optional(),
+  generalObservation: z.string().max(TEACHER_OBSERVATION_MAX_LENGTH).optional(),
   specialValue: z.string().optional(),
   numericGrade: z.number().int().min(1).max(10).optional(),
   submittedAt: isoDateSchema.optional(),

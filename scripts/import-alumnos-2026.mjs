@@ -156,12 +156,38 @@ let deletedStudents = 0
 
 try {
   if (replaceExisting) {
-    const result = await prisma.student.deleteMany({
+    const existingStudents = await prisma.student.findMany({
       where: {
         OR: courses.map((course) => ({
           grade: course.grade,
           division: course.division,
         })),
+      },
+      select: { id: true },
+    })
+
+    const existingStudentIds = existingStudents.map((student) => student.id)
+    if (existingStudentIds.length > 0) {
+      const [evaluations, reportCards, adaptedCriteria] = await Promise.all([
+        prisma.evaluation.count({ where: { studentId: { in: existingStudentIds } } }),
+        prisma.reportCard.count({ where: { studentId: { in: existingStudentIds } } }),
+        prisma.adaptedCriterion.count({ where: { studentId: { in: existingStudentIds } } }),
+      ])
+
+      if (evaluations + reportCards + adaptedCriteria > 0) {
+        throw new Error(
+          [
+            "--replace-existing abortado: borrar alumnos existentes eliminaria datos academicos en cascada.",
+            `Evaluaciones: ${evaluations}. Boletines: ${reportCards}. Criterios adaptados: ${adaptedCriteria}.`,
+            "Usa el import sin --replace-existing o --sync-active para conservar historico.",
+          ].join(" "),
+        )
+      }
+    }
+
+    const result = await prisma.student.deleteMany({
+      where: {
+        id: { in: existingStudentIds },
       },
     })
     deletedStudents = result.count

@@ -5,6 +5,7 @@ import { logWarning } from "@/lib/logger"
 import { requireApiTeacher } from "@/lib/auth/current-user"
 import { teacherOwnsAssignment } from "@/lib/auth/assignment-guards"
 import { coursePartsFromId } from "@/lib/academic-course"
+import { TEACHER_OBSERVATION_MAX_LENGTH } from "@/lib/evaluation-limits"
 import type { Prisma } from "@prisma/client"
 
 export const dynamic = "force-dynamic"
@@ -23,7 +24,7 @@ const adaptedEvaluationSchema = z.object({
       grade: z.string().min(1),
     }),
   ),
-  observations: z.record(z.string(), z.string()).optional(),
+  observations: z.record(z.string(), z.string().max(TEACHER_OBSERVATION_MAX_LENGTH)).optional(),
   numericGrades: z.record(z.string(), z.number().int().min(1).max(10)).optional(),
 })
 
@@ -251,12 +252,23 @@ export async function POST(request: Request) {
       where: { studentId: { in: Array.from(validStudentIds) }, subjectId: input.subjectId, active: true },
       select: { id: true, studentId: true },
     })
-    const validCriterionIds = new Set(adaptedCriteriaIds.map((c) => c.id))
+    const studentIdByCriterionId = new Map(adaptedCriteriaIds.map((c) => [c.id, c.studentId]))
 
+    const seenGradeKeys = new Set<string>()
     for (const g of input.grades) {
-      if (!validCriterionIds.has(g.adaptedCriterionId)) {
+      const criterionStudentId = studentIdByCriterionId.get(g.adaptedCriterionId)
+      if (!criterionStudentId) {
         return NextResponse.json({ error: "Criterio adaptado invalido en el payload" }, { status: 400 })
       }
+      if (criterionStudentId !== g.studentId) {
+        return NextResponse.json({ error: "El criterio adaptado no pertenece al alumno indicado" }, { status: 400 })
+      }
+
+      const key = `${g.studentId}:${g.adaptedCriterionId}`
+      if (seenGradeKeys.has(key)) {
+        return NextResponse.json({ error: "El payload contiene criterios duplicados para un alumno" }, { status: 400 })
+      }
+      seenGradeKeys.add(key)
     }
 
     if (input.submit) {
