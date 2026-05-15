@@ -389,7 +389,12 @@ function createPdfBuffer(data: ReportCardPdfData) {
 
     if (typeof subject.numericGrade === "number") {
       page = ensureSpace(pages, 32, data, levelLabels, logo)
-      addObservationRow(page, "Nota", String(subject.numericGrade))
+      const gradeNum = parseInt(data.student.grade.charAt(0))
+      const qualitativeLabels: Record<number, string> = { 1: "Desaprobado", 2: "Regular", 3: "Bueno", 4: "Muy Bueno", 5: "Sobresaliente" }
+      const gradeDisplay = gradeNum <= 3 && subject.numericGrade in qualitativeLabels
+        ? qualitativeLabels[subject.numericGrade]!
+        : String(subject.numericGrade)
+      addObservationRow(page, "Nota", gradeDisplay)
     }
   }
 

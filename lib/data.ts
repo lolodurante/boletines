@@ -586,3 +586,42 @@ export function getGradeScale(grade: string): GradeLevel[] {
   const gradeNum = parseInt(grade.charAt(0))
   return gradeNum >= 4 ? gradeScale4to6 : gradeScale1to3
 }
+
+/**
+ * ESCALA CUALITATIVA — Grados 1°, 2° y 3°
+ *
+ * Para estos grados, el campo `numericGrade` (Int en la DB) NO almacena
+ * una nota numérica 1-10 sino un índice de esta escala:
+ *
+ *   1 → Desaprobado
+ *   2 → Regular
+ *   3 → Bueno
+ *   4 → Muy Bueno
+ *   5 → Sobresaliente
+ *
+ * Para grados 4°, 5° y 6°, `numericGrade` es una nota numérica 1-10
+ * y se interpreta directamente como número.
+ *
+ * Al exportar notas (Excel u otro formato), usar `usesQualitativeGrade`
+ * para determinar cómo interpretar el valor almacenado:
+ *
+ *   if (usesQualitativeGrade(courseGrade)) {
+ *     label = QUALITATIVE_GRADE_LABELS[numericGrade] // "Sobresaliente", etc.
+ *   } else {
+ *     label = String(numericGrade) // "7", "8", etc.
+ *   }
+ */
+export const QUALITATIVE_GRADE_LABELS: Record<number, string> = {
+  1: "Desaprobado",
+  2: "Regular",
+  3: "Bueno",
+  4: "Muy Bueno",
+  5: "Sobresaliente",
+}
+
+export const QUALITATIVE_GRADE_OPTIONS = [5, 4, 3, 2, 1] as const
+
+export function usesQualitativeGrade(gradeStr: string): boolean {
+  const n = parseInt(gradeStr.charAt(0))
+  return n >= 1 && n <= 3
+}

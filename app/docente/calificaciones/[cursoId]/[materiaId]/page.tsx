@@ -29,6 +29,9 @@ import {
 import { toast } from "sonner"
 import {
   getGradeScale,
+  usesQualitativeGrade,
+  QUALITATIVE_GRADE_OPTIONS,
+  QUALITATIVE_GRADE_LABELS,
   type Evaluation,
   type GradeLevel,
 } from "@/lib/data"
@@ -116,6 +119,7 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
     const dbScale = data.gradeScales.find((s) => s.gradeFrom <= gradeNum && gradeNum <= s.gradeTo)
     return dbScale ? (dbScale.labels as GradeLevel[]) : getGradeScale(courseGrade)
   }, [courseGrade, data.gradeScales])
+  const isQualitative = courseGrade ? usesQualitativeGrade(courseGrade) : false
   
   const criteria = useMemo(() => {
     const selectedCourse = data.courses.find(item => item.id === cursoId)
@@ -365,26 +369,49 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                   {subject.hasNumericGrade && (
                     <div className="space-y-1.5">
                       <p className="text-sm text-muted-foreground">Nota</p>
-                      <Input
-                        type="number"
-                        min={1}
-                        max={10}
-                        step={1}
-                        inputMode="numeric"
-                        value={numericGrades[student.id] ?? ""}
-                        disabled={!canEdit}
-                        onChange={(event) => {
-                          const value = event.target.value
-                          setNumericGrades(prev => ({
-                            ...prev,
-                            [student.id]: value,
-                          }))
-                          setIsDirty(true)
-                          setAutoSaveBlocked(false)
-                        }}
-                        className="h-9"
-                        placeholder="1-10"
-                      />
+                      {isQualitative ? (
+                        <Select
+                          value={numericGrades[student.id] ?? ""}
+                          disabled={!canEdit}
+                          onValueChange={(value) => {
+                            setNumericGrades(prev => ({ ...prev, [student.id]: value }))
+                            setIsDirty(true)
+                            setAutoSaveBlocked(false)
+                          }}
+                        >
+                          <SelectTrigger className={`w-full ${numericGrades[student.id] ? "border-transparent" : "border-dashed text-muted-foreground"}`}>
+                            <SelectValue placeholder="— seleccionar —" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {QUALITATIVE_GRADE_OPTIONS.map((val) => (
+                              <SelectItem key={val} value={String(val)}>
+                                {QUALITATIVE_GRADE_LABELS[val]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Input
+                          type="number"
+                          min={1}
+                          max={10}
+                          step={1}
+                          inputMode="numeric"
+                          value={numericGrades[student.id] ?? ""}
+                          disabled={!canEdit}
+                          onChange={(event) => {
+                            const value = event.target.value
+                            setNumericGrades(prev => ({
+                              ...prev,
+                              [student.id]: value,
+                            }))
+                            setIsDirty(true)
+                            setAutoSaveBlocked(false)
+                          }}
+                          className="h-9"
+                          placeholder="1-10"
+                        />
+                      )}
                     </div>
                   )}
                 </div>
@@ -461,26 +488,49 @@ export default function GradeEntryPage({ params }: GradeEntryPageProps) {
                     })}
                     {subject.hasNumericGrade && (
                       <td className="border-b px-2 py-2">
-                        <Input
-                          type="number"
-                          min={1}
-                          max={10}
-                          step={1}
-                          inputMode="numeric"
-                          value={numericGrades[student.id] ?? ""}
-                          disabled={!canEdit}
-                          onChange={(event) => {
-                            const value = event.target.value
-                            setNumericGrades(prev => ({
-                              ...prev,
-                              [student.id]: value,
-                            }))
-                            setIsDirty(true)
-                            setAutoSaveBlocked(false)
-                          }}
-                          className="h-9 text-center"
-                          placeholder="1-10"
-                        />
+                        {isQualitative ? (
+                          <Select
+                            value={numericGrades[student.id] ?? ""}
+                            disabled={!canEdit}
+                            onValueChange={(value) => {
+                              setNumericGrades(prev => ({ ...prev, [student.id]: value }))
+                              setIsDirty(true)
+                              setAutoSaveBlocked(false)
+                            }}
+                          >
+                            <SelectTrigger className={`w-full ${numericGrades[student.id] ? "border-transparent" : "border-dashed text-muted-foreground"}`}>
+                              <SelectValue placeholder="— seleccionar —" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {QUALITATIVE_GRADE_OPTIONS.map((val) => (
+                                <SelectItem key={val} value={String(val)}>
+                                  {QUALITATIVE_GRADE_LABELS[val]}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        ) : (
+                          <Input
+                            type="number"
+                            min={1}
+                            max={10}
+                            step={1}
+                            inputMode="numeric"
+                            value={numericGrades[student.id] ?? ""}
+                            disabled={!canEdit}
+                            onChange={(event) => {
+                              const value = event.target.value
+                              setNumericGrades(prev => ({
+                                ...prev,
+                                [student.id]: value,
+                              }))
+                              setIsDirty(true)
+                              setAutoSaveBlocked(false)
+                            }}
+                            className="h-9 text-center"
+                            placeholder="1-10"
+                          />
+                        )}
                       </td>
                     )}
                   </tr>

@@ -323,7 +323,7 @@ export default function MateriasPage() {
     if (!selectedSubject) return
     updateSubject({
       entryKind,
-      reportType: entryKind === "ABSENCES" ? "INGLES" : selectedSubject.reportType,
+      reportType: selectedSubject.reportType,
       hasNumericGrade: entryKind === "ACADEMIC" ? selectedSubject.hasNumericGrade : false,
       criteriaByGrade:
         entryKind === "ACADEMIC"

@@ -4,7 +4,14 @@ export function renderReportCardTemplate(data: ReportCardPdfData) {
   const subjectRows = data.subjects
     .map((subject) => {
       const criteria = subject.criteria.map((criterion) => `${criterion.name}: ${criterion.gradeLabel}`).join(" | ")
-      const numericGrade = typeof subject.numericGrade === "number" ? ` | ${subject.subjectName}: nota ${subject.numericGrade}` : ""
+      const gradeNum = parseInt(data.student.grade.charAt(0))
+      const qualitativeLabels: Record<number, string> = { 1: "Desaprobado", 2: "Regular", 3: "Bueno", 4: "Muy Bueno", 5: "Sobresaliente" }
+      const numericGradeDisplay = typeof subject.numericGrade === "number"
+        ? gradeNum <= 3 && subject.numericGrade in qualitativeLabels
+          ? qualitativeLabels[subject.numericGrade]!
+          : String(subject.numericGrade)
+        : null
+      const numericGrade = numericGradeDisplay ? ` | ${subject.subjectName}: nota ${numericGradeDisplay}` : ""
       return `${subject.subjectName} (${subject.teacherName}) - ${criteria}${numericGrade}`
     })
     .join("\n")

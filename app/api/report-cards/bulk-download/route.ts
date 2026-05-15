@@ -72,14 +72,14 @@ async function generateMissingPdf(reportCard: {
       })),
     })),
     absences:
-      reportCard.type === "INGLES"
+      absenceEvaluations.length > 0
         ? absenceEvaluations.map((evaluation) => ({
             label: evaluation.subject.name,
             value: evaluation.specialValue ?? "",
           }))
         : undefined,
     comments:
-      reportCard.type === "INGLES"
+      commentEvaluations.length > 0
         ? commentEvaluations.map((evaluation) => ({
             label: evaluation.subject.entryKind === "TEACHER_OBSERVATION"
               ? "Comentario"
