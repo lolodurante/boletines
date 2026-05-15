@@ -33,7 +33,31 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { usePlatformData } from "@/lib/use-platform-data"
+
+interface StudentOption {
+  id: string
+  name: string
+  courseId: string
+  parentEmail: string | null
+}
+
+interface CourseOption {
+  id: string
+  name: string
+}
+
+interface SubjectOption {
+  id: string
+  name: string
+  appliesTo: string[]
+}
+
+interface AdaptedStudentsConfigData {
+  adaptedStudents: StudentOption[]
+  students: StudentOption[]
+  courses: CourseOption[]
+  subjects: SubjectOption[]
+}
 
 interface AdaptedCriterion {
   id: string
@@ -51,9 +75,16 @@ interface CriterionForm {
 }
 
 const emptyCriterionForm: CriterionForm = { name: "", description: "" }
+const emptyData: AdaptedStudentsConfigData = {
+  adaptedStudents: [],
+  students: [],
+  courses: [],
+  subjects: [],
+}
 
 export function AdaptedStudentsManager() {
-  const { data, reload } = usePlatformData()
+  const [data, setData] = useState<AdaptedStudentsConfigData>(emptyData)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [expandedStudents, setExpandedStudents] = useState<Set<string>>(new Set())
   const [adaptedCriteriaByStudent, setAdaptedCriteriaByStudent] = useState<Record<string, AdaptedCriterion[]>>({})
   const [loadingCriteria, setLoadingCriteria] = useState<Set<string>>(new Set())
@@ -69,6 +100,23 @@ export function AdaptedStudentsManager() {
 
   const adaptedStudents = data.adaptedStudents
   const regularStudents = data.students
+
+  const loadData = useCallback(async () => {
+    const response = await fetch("/api/adapted-students-config", { cache: "no-store" })
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(error?.error ?? "No se pudieron cargar los alumnos adaptados")
+    }
+
+    setData((await response.json()) as AdaptedStudentsConfigData)
+    setLoadError(null)
+  }, [])
+
+  useEffect(() => {
+    loadData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "No se pudieron cargar los alumnos adaptados")
+    })
+  }, [loadData])
 
   const loadCriteria = useCallback(async (studentId: string) => {
     if (loadingCriteria.has(studentId) || adaptedCriteriaByStudent[studentId]) return
@@ -111,7 +159,7 @@ export function AdaptedStudentsManager() {
       toast.error(error?.error ?? "No se pudo actualizar el alumno")
       return
     }
-    await reload()
+    await loadData()
     setAdaptedCriteriaByStudent((prev) => {
       const next = { ...prev }
       delete next[studentId]
@@ -205,6 +253,12 @@ export function AdaptedStudentsManager() {
 
   return (
     <div className="flex flex-col gap-4">
+      {loadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
+
       <div className="flex items-center justify-between">
         <p className="text-sm text-muted-foreground">
           {adaptedStudents.length === 0

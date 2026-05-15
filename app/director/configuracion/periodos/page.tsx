@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -34,8 +34,15 @@ import {
   Archive,
 } from "lucide-react"
 import { toast } from "sonner"
-import { usePlatformData } from "@/lib/use-platform-data"
 import type { Period, PeriodStatus } from "@/lib/data"
+
+interface PeriodWithProgress extends Period {
+  progress: number
+}
+
+interface PeriodConfigData {
+  periods: PeriodWithProgress[]
+}
 
 function toInputDate(ddmmyyyy: string): string {
   const [d, m, y] = ddmmyyyy.split("/")
@@ -50,8 +57,8 @@ function fromInputDate(yyyymmdd: string): string {
 }
 
 export default function PeriodosPage() {
-  const { data } = usePlatformData()
-  const [periods, setPeriods] = useState(data.periods)
+  const [periods, setPeriods] = useState<PeriodWithProgress[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [editingPeriod, setEditingPeriod] = useState<Period | null>(null)
   
@@ -62,9 +69,23 @@ export default function PeriodosPage() {
   const [formDeadline, setFormDeadline] = useState("")
   const [formIsActive, setFormIsActive] = useState(false)
 
-  useEffect(() => {
+  const loadData = useCallback(async () => {
+    const response = await fetch("/api/director/period-config", { cache: "no-store" })
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(error?.error ?? "No se pudieron cargar los periodos")
+    }
+
+    const data = (await response.json()) as PeriodConfigData
     setPeriods(data.periods)
-  }, [data.periods])
+    setLoadError(null)
+  }, [])
+
+  useEffect(() => {
+    loadData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "No se pudieron cargar los periodos")
+    })
+  }, [loadData])
 
   const handleOpenDialog = (period?: Period) => {
     if (period) {
@@ -138,15 +159,16 @@ export default function PeriodosPage() {
         teacherDeadline: displayDeadline,
         status
       }
+      const newPeriodWithProgress = { ...newPeriod, progress: 0 }
       
       // If new period is active, close others
       if (formIsActive) {
         setPeriods([
           ...periods.map(p => p.status === "Activo" ? { ...p, status: "Cerrado" as PeriodStatus } : p),
-          newPeriod
+          newPeriodWithProgress
         ])
       } else {
-        setPeriods([...periods, newPeriod])
+        setPeriods([...periods, newPeriodWithProgress])
       }
       toast.success("Periodo creado")
     }
@@ -174,13 +196,6 @@ export default function PeriodosPage() {
       p.id === periodId ? { ...p, status: "Cerrado" as PeriodStatus } : p
     ))
     toast.success("Periodo archivado")
-  }
-
-  const getProgress = (periodId: string) => {
-    const periodEvaluations = data.evaluations.filter(evaluation => evaluation.periodId === periodId)
-    if (periodEvaluations.length === 0) return 0
-    const completed = periodEvaluations.filter(evaluation => evaluation.status === "Completo").length
-    return Math.round((completed / periodEvaluations.length) * 100)
   }
 
   return (
@@ -283,6 +298,12 @@ export default function PeriodosPage() {
         }
       />
 
+      {loadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
+
       {/* Period Cards */}
       <div className="grid gap-4">
         {periods.map((period) => (
@@ -310,9 +331,9 @@ export default function PeriodosPage() {
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
                     <span className="text-muted-foreground">Avance de evaluaciones</span>
-                    <span className="font-medium">{getProgress(period.id)}%</span>
+                    <span className="font-medium">{period.progress}%</span>
                   </div>
-                  <Progress value={getProgress(period.id)} className="h-2" />
+                  <Progress value={period.progress} className="h-2" />
                 </div>
               </CardContent>
             )}

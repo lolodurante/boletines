@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Progress } from "@/components/ui/progress"
@@ -22,13 +22,9 @@ import {
   SheetTrigger,
 } from "@/components/ui/sheet"
 import { Avatar, AvatarFallback } from "@/components/ui/avatar"
-import { usePlatformData } from "@/lib/use-platform-data"
-import {
-  getAssignmentProgress,
-  getProgressPercentage,
-  getStatusFromProgress,
-} from "@/lib/evaluation-metrics"
+import { getProgressPercentage } from "@/lib/evaluation-metrics"
 import type { EvaluationStatus } from "@/lib/data"
+import { toast } from "sonner"
 
 const STATUS_ORDER: Record<EvaluationStatus, number> = {
   "Sin iniciar": 0,
@@ -36,24 +32,11 @@ const STATUS_ORDER: Record<EvaluationStatus, number> = {
   "Completo": 2,
 }
 
-export default function SeguimientoPage() {
-  const { data } = usePlatformData()
-  const [selectedPeriodId, setSelectedPeriodId] = useState(
-    data.periods.find(p => p.status === "Activo")?.id ?? data.periods[0]?.id ?? "all"
-  )
-  const [selectedCourseId, setSelectedCourseId] = useState("all")
-  const [selectedStatus, setSelectedStatus] = useState("all")
-
-  const activePeriodId = selectedPeriodId === "all" ? null : selectedPeriodId
-
-  const filteredAssignments = data.courseAssignments.filter(a => {
-    if (activePeriodId && a.periodId !== activePeriodId) return false
-    if (selectedCourseId !== "all" && a.courseId !== selectedCourseId) return false
-    return true
-  })
-
-  // Group assignments by teacher
-  const teacherMap = new Map<string, {
+interface TeacherProgressData {
+  selectedPeriodId: string
+  periods: Array<{ id: string; name: string }>
+  courses: Array<{ id: string; name: string }>
+  teacherRows: Array<{
     teacherId: string
     teacherName: string
     assignments: Array<{
@@ -67,53 +50,70 @@ export default function SeguimientoPage() {
     }>
     totalSlots: number
     completedSlots: number
-  }>()
+    overallStatus: EvaluationStatus
+  }>
+}
 
-  for (const assignment of filteredAssignments) {
-    const teacher = data.teachers.find(t => t.id === assignment.teacherId)
-    if (!teacher) continue
-    const course = data.courses.find(c => c.id === assignment.courseId)
-    const subject = data.subjects.find(s => s.id === assignment.subjectId)
-    const progress = getAssignmentProgress(data, assignment)
+export default function SeguimientoPage() {
+  const [data, setData] = useState<TeacherProgressData>({
+    selectedPeriodId: "all",
+    periods: [],
+    courses: [],
+    teacherRows: [],
+  })
+  const [selectedPeriodId, setSelectedPeriodId] = useState<string | null>(null)
+  const [selectedCourseId, setSelectedCourseId] = useState("all")
+  const [selectedStatus, setSelectedStatus] = useState("all")
+  const [isLoading, setIsLoading] = useState(true)
 
-    if (!teacherMap.has(teacher.id)) {
-      teacherMap.set(teacher.id, {
-        teacherId: teacher.id,
-        teacherName: teacher.name,
-        assignments: [],
-        totalSlots: 0,
-        completedSlots: 0,
+  useEffect(() => {
+    const controller = new AbortController()
+    setIsLoading(true)
+
+    async function loadProgress() {
+      const params = new URLSearchParams()
+      if (selectedPeriodId) params.set("periodId", selectedPeriodId)
+      if (selectedCourseId !== "all") params.set("courseId", selectedCourseId)
+
+      const response = await fetch(`/api/director/teacher-progress${params.size ? `?${params}` : ""}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
       })
+      if (!response.ok) {
+        toast.error("No se pudo cargar el seguimiento")
+        setIsLoading(false)
+        return
+      }
+
+      const nextData = (await response.json()) as TeacherProgressData
+      setData(nextData)
+      setSelectedPeriodId((current) => current ?? nextData.selectedPeriodId)
+      setIsLoading(false)
     }
-    const entry = teacherMap.get(teacher.id)!
-    entry.assignments.push({
-      courseId: assignment.courseId,
-      courseName: course?.name ?? "—",
-      subjectId: assignment.subjectId,
-      subjectName: subject?.name ?? "—",
-      studentCount: progress.studentCount,
-      completedCount: progress.completedCount,
-      status: progress.status,
+
+    loadProgress().catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return
+      toast.error("No se pudo cargar el seguimiento")
+      setIsLoading(false)
     })
-    entry.totalSlots += progress.studentCount
-    entry.completedSlots += progress.completedCount
-  }
 
-  let teacherRows = Array.from(teacherMap.values()).map(row => ({
-    ...row,
-    overallStatus: getStatusFromProgress(row.completedSlots, row.totalSlots),
-  }))
+    return () => {
+      controller.abort()
+    }
+  }, [selectedCourseId, selectedPeriodId])
 
-  // Filter by status
-  if (selectedStatus !== "all") {
-    teacherRows = teacherRows.filter(r => r.overallStatus === selectedStatus)
-  }
+  const teacherRows = useMemo(() => {
+    const rows = selectedStatus === "all"
+      ? data.teacherRows
+      : data.teacherRows.filter((row) => row.overallStatus === selectedStatus)
 
-  // Sort: incomplete first
-  teacherRows.sort((a, b) => STATUS_ORDER[a.overallStatus] - STATUS_ORDER[b.overallStatus])
+    return [...rows].sort((a, b) => STATUS_ORDER[a.overallStatus] - STATUS_ORDER[b.overallStatus])
+  }, [data.teacherRows, selectedStatus])
 
   const pendingCount = teacherRows.filter(r => r.overallStatus !== "Completo").length
   const doneCount = teacherRows.filter(r => r.overallStatus === "Completo").length
+  const periodValue = selectedPeriodId ?? data.selectedPeriodId
 
   return (
     <div className="flex flex-col gap-6">
@@ -136,7 +136,7 @@ export default function SeguimientoPage() {
         <CardContent className="flex flex-wrap gap-4 py-4">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">Período:</span>
-            <Select value={selectedPeriodId} onValueChange={setSelectedPeriodId}>
+            <Select value={periodValue} onValueChange={setSelectedPeriodId}>
               <SelectTrigger className="w-[180px]">
                 <SelectValue />
               </SelectTrigger>
@@ -181,7 +181,7 @@ export default function SeguimientoPage() {
 
       {/* Teacher rows */}
       <div className="flex flex-col gap-3">
-        {teacherRows.length === 0 && (
+        {!isLoading && teacherRows.length === 0 && (
           <Card>
             <CardContent className="py-8 text-center text-sm text-muted-foreground">
               No hay docentes con asignaciones para los filtros seleccionados.

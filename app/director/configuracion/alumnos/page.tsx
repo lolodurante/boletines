@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { Edit, Plus, Trash2 } from "lucide-react"
 import { toast } from "sonner"
 import { PageHeader } from "@/components/page-header"
@@ -43,7 +43,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
-import { usePlatformData } from "@/lib/use-platform-data"
+import type { Course, Student } from "@/lib/data"
 
 type StudentForm = {
   id?: string
@@ -60,19 +60,48 @@ const emptyStudentForm: StudentForm = {
   familyEmail: "",
 }
 
+interface StudentConfigData {
+  courses: Course[]
+  students: Student[]
+}
+
+const emptyData: StudentConfigData = {
+  courses: [],
+  students: [],
+}
+
 function splitStudentName(name: string) {
   const [lastName = "", firstName = ""] = name.split(",").map((part) => part.trim())
   return { firstName, lastName }
 }
 
 export default function StudentsAndCoursesPage() {
-  const { data, reload } = usePlatformData()
+  const [data, setData] = useState<StudentConfigData>(emptyData)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [isCourseDialogOpen, setIsCourseDialogOpen] = useState(false)
   const [isStudentDialogOpen, setIsStudentDialogOpen] = useState(false)
   const [courseForm, setCourseForm] = useState({ grade: "", division: "" })
   const [studentForm, setStudentForm] = useState<StudentForm>(emptyStudentForm)
   const [courseFilter, setCourseFilter] = useState("all")
   const [isSaving, setIsSaving] = useState(false)
+
+  const loadData = useCallback(async () => {
+    const response = await fetch("/api/director/student-config", { cache: "no-store" })
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(error?.error ?? "No se pudieron cargar los alumnos")
+    }
+
+    const nextData = (await response.json()) as StudentConfigData
+    setData(nextData)
+    setLoadError(null)
+  }, [])
+
+  useEffect(() => {
+    loadData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "No se pudieron cargar los alumnos")
+    })
+  }, [loadData])
 
   const students = useMemo(() => {
     return data.students.filter((student) => courseFilter === "all" || student.courseId === courseFilter)
@@ -110,7 +139,7 @@ export default function StudentsAndCoursesPage() {
         toast.error(error?.error ?? "No se pudo guardar el curso")
         return
       }
-      await reload()
+      await loadData()
       toast.success("Curso guardado")
       setCourseForm({ grade: "", division: "" })
       setIsCourseDialogOpen(false)
@@ -130,7 +159,7 @@ export default function StudentsAndCoursesPage() {
       toast.error(error?.error ?? "No se pudo dar de baja el curso")
       return
     }
-    await reload()
+    await loadData()
     toast.success("Curso dado de baja")
   }
 
@@ -148,7 +177,7 @@ export default function StudentsAndCoursesPage() {
         toast.error(error?.error ?? "No se pudo guardar el alumno")
         return
       }
-      await reload()
+      await loadData()
       toast.success("Alumno guardado")
       setStudentForm(emptyStudentForm)
       setIsStudentDialogOpen(false)
@@ -168,7 +197,7 @@ export default function StudentsAndCoursesPage() {
       toast.error(error?.error ?? "No se pudo dar de baja el alumno")
       return
     }
-    await reload()
+    await loadData()
     toast.success("Alumno dado de baja")
   }
 
@@ -182,6 +211,12 @@ export default function StudentsAndCoursesPage() {
           { label: "Cursos y alumnos" },
         ]}
       />
+
+      {loadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
 
       <Tabs defaultValue="students" className="space-y-4">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">

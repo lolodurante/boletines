@@ -1,8 +1,5 @@
-"use client"
-
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
-import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
 import { StatusBadge } from "@/components/status-badge"
 import { PageHeader } from "@/components/page-header"
@@ -31,57 +28,21 @@ import {
   ArrowRight
 } from "lucide-react"
 import Link from "next/link"
-import { usePlatformData } from "@/lib/use-platform-data"
-import type { EvaluationStatus } from "@/lib/data"
-import {
-  getCoursePeriodProgress,
-  getProgressPercentage,
-  getTeacherCourseStatus,
-} from "@/lib/evaluation-metrics"
+import { getProgressPercentage } from "@/lib/evaluation-metrics"
+import { getDirectorDashboardData } from "@/server/services/director-dashboard-service"
 
-// Course progress data
-interface CourseProgressData {
-  courseId: string
-  courseName: string
-  studentCount: number
-  teacherCount: number
-  completedEvaluations: number
-  totalEvaluations: number
-  status: EvaluationStatus
-}
-
-export default function DirectorDashboard() {
-  const { data } = usePlatformData()
-  const activePeriod = data.periods.find(period => period.status === "Activo") ?? data.periods[0]
-  const pendingReports = data.reportCards.filter(report => report.status === "Listo para revisión").length
-  const generatedReports = data.reportCards.filter(report => report.status === "PDF generado").length
-  const teachersWithPendingDelivery = data.teacherPerformance.filter(teacher => teacher.completionRate < 100).length
-  const courseProgressData: CourseProgressData[] = data.courses.map((course) => {
-    const progress = activePeriod
-      ? getCoursePeriodProgress(data, course.id, activePeriod.id)
-      : {
-          studentCount: course.studentCount,
-          teacherCount: 0,
-          completedEvaluations: 0,
-          totalEvaluations: 0,
-          status: "Sin iniciar" as EvaluationStatus,
-          teachers: [],
-        }
-    
-    return {
-      courseId: course.id,
-      courseName: course.name,
-      studentCount: progress.studentCount,
-      teacherCount: progress.teacherCount,
-      completedEvaluations: progress.completedEvaluations,
-      totalEvaluations: progress.totalEvaluations,
-      status: progress.status
-    }
-  })
-  const completedCourses = courseProgressData.filter((course) => course.status === "Completo").length
-  const recentReports = data.directorReportCards
-    .filter(report => report.status === "Listo para revisión")
-    .slice(0, 5)
+export default async function DirectorDashboard() {
+  const {
+    activePeriod,
+    pendingReports,
+    generatedReports,
+    teachersWithPendingDelivery,
+    teacherCount,
+    completedCourses,
+    courseCount,
+    courseProgressData,
+    recentReports,
+  } = await getDirectorDashboardData()
 
   return (
     <div className="flex flex-col gap-6">
@@ -120,12 +81,12 @@ export default function DirectorDashboard() {
           <CardContent>
             <div className="flex items-baseline gap-1">
               <span className="text-3xl font-bold">{completedCourses}</span>
-              <span className="text-lg text-muted-foreground">/{Math.max(data.courses.length, 1)}</span>
+              <span className="text-lg text-muted-foreground">/{Math.max(courseCount, 1)}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               todos los docentes entregaron
             </p>
-            <Progress value={(completedCourses / Math.max(data.courses.length, 1)) * 100} className="mt-2 h-1.5" />
+            <Progress value={(completedCourses / Math.max(courseCount, 1)) * 100} className="mt-2 h-1.5" />
           </CardContent>
         </Card>
 
@@ -139,7 +100,7 @@ export default function DirectorDashboard() {
           <CardContent>
             <div className="text-3xl font-bold text-warning">{teachersWithPendingDelivery}</div>
             <p className="text-xs text-muted-foreground mt-1">
-              de {data.teachers.length} docentes
+              de {teacherCount} docentes
             </p>
           </CardContent>
         </Card>
@@ -272,10 +233,10 @@ export default function DirectorDashboard() {
                                 <h4 className="font-medium mb-2">Docentes asignados</h4>
                                 <ul className="space-y-2 text-sm">
                                   {activePeriod
-                                    ? getCoursePeriodProgress(data, course.courseId, activePeriod.id).teachers.map((teacher) => (
+                                    ? course.teachers.map((teacher) => (
                                     <li key={teacher.id} className="flex items-center justify-between">
                                       <span>{teacher.name}</span>
-                                      <StatusBadge status={getTeacherCourseStatus(data, teacher, course.courseId, activePeriod.id)} />
+                                      <StatusBadge status={teacher.status} />
                                     </li>
                                       ))
                                     : null}

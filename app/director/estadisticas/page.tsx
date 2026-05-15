@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Progress } from "@/components/ui/progress"
@@ -32,7 +32,7 @@ import {
   CheckCircle2,
   Clock
 } from "lucide-react"
-import { usePlatformData } from "@/lib/use-platform-data"
+import { toast } from "sonner"
 
 const chartConfig = {
   logrado: {
@@ -49,53 +49,86 @@ const chartConfig = {
   },
 }
 
+interface StatisticsData {
+  periods: Array<{ id: string; name: string }>
+  courses: Array<{ id: string; name: string }>
+  subjects: Array<{ id: string; name: string }>
+  gradeDistribution: Array<{ subject: string; logrado: number; enProceso: number; enInicio: number }>
+  statusDistribution: Array<{ name: "Completo" | "En progreso" | "Sin iniciar"; value: number; fill: string }>
+  totalStatusCount: number
+  summary: {
+    avgScore: string
+    logradoPercentage: number
+    lowestSubject: string
+    onTimeTeachers: number
+    totalTeachers: number
+    totalStudents: number
+  }
+  teacherPerformance: Array<{
+    id: string
+    name: string
+    courses: number
+    students: number
+    completionRate: number
+    onTime: boolean
+    lastActivity: string
+  }>
+}
+
 export default function EstadisticasPage() {
-  const { data } = usePlatformData()
+  const [data, setData] = useState<StatisticsData>({
+    periods: [],
+    courses: [],
+    subjects: [],
+    gradeDistribution: [],
+    statusDistribution: [],
+    totalStatusCount: 0,
+    summary: {
+      avgScore: "0.0",
+      logradoPercentage: 0,
+      lowestSubject: "—",
+      onTimeTeachers: 0,
+      totalTeachers: 0,
+      totalStudents: 0,
+    },
+    teacherPerformance: [],
+  })
   const [selectedPeriod, setSelectedPeriod] = useState("all")
   const [selectedCourse, setSelectedCourse] = useState("all")
   const [selectedSubject, setSelectedSubject] = useState("all")
 
-  const filteredEvaluations = data.evaluations.filter((evaluation) => {
-    if (selectedPeriod !== "all" && evaluation.periodId !== selectedPeriod) return false
-    if (selectedCourse !== "all" && evaluation.courseId !== selectedCourse) return false
-    if (selectedSubject !== "all" && evaluation.subjectId !== selectedSubject) return false
-    return true
-  })
-  const gradeDistribution = data.subjects
-    .filter((subject) => selectedSubject === "all" || subject.id === selectedSubject)
-    .map((subject) => {
-      const grades = filteredEvaluations
-        .filter((evaluation) => evaluation.subjectId === subject.id)
-        .flatMap((evaluation) => Object.values(evaluation.grades))
+  useEffect(() => {
+    const controller = new AbortController()
 
-      return {
-        subject: subject.name,
-        logrado: grades.filter((grade) => grade === "Logrado" || grade === "Destacado").length,
-        enProceso: grades.filter((grade) => grade === "En proceso").length,
-        enInicio: grades.filter((grade) => grade === "En inicio").length,
+    async function loadStatistics() {
+      const params = new URLSearchParams()
+      if (selectedPeriod !== "all") params.set("periodId", selectedPeriod)
+      if (selectedCourse !== "all") params.set("courseId", selectedCourse)
+      if (selectedSubject !== "all") params.set("subjectId", selectedSubject)
+
+      const response = await fetch(`/api/director/statistics${params.size ? `?${params}` : ""}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      })
+      if (!response.ok) {
+        toast.error("No se pudieron cargar las estadisticas")
+        return
       }
-    })
-    .filter((row) => row.logrado + row.enProceso + row.enInicio > 0)
-  const statusDistribution = (["Completo", "En progreso", "Sin iniciar"] as const).map((status) => ({
-    name: status,
-    value: filteredEvaluations.filter((evaluation) => evaluation.status === status).length,
-    fill:
-      status === "Completo"
-        ? "var(--color-success)"
-        : status === "En progreso"
-          ? "var(--color-warning)"
-          : "var(--color-muted)",
-  }))
-  const totalStatusCount = statusDistribution.reduce((sum, item) => sum + item.value, 0)
 
-  // Summary stats
-  const totalGrades = gradeDistribution.reduce((sum, row) => sum + row.logrado + row.enProceso + row.enInicio, 0)
-  const logradoTotal = gradeDistribution.reduce((sum, row) => sum + row.logrado, 0)
-  const logradoPercentage = totalGrades > 0 ? Math.round((logradoTotal / totalGrades) * 100) : 0
-  const avgScore = totalGrades > 0 ? ((logradoTotal * 9 + gradeDistribution.reduce((sum, row) => sum + row.enProceso, 0) * 6 + gradeDistribution.reduce((sum, row) => sum + row.enInicio, 0) * 3) / totalGrades).toFixed(1) : "0.0"
-  const lowestSubject = gradeDistribution.reduce((lowest, row) => row.enInicio > lowest.enInicio ? row : lowest, gradeDistribution[0] ?? { subject: "—", logrado: 0, enProceso: 0, enInicio: 0 }).subject
-  const onTimeTeachers = data.teacherPerformance.filter(teacher => teacher.onTime).length
-  const totalTeachers = data.teachers.length
+      const nextData = (await response.json()) as StatisticsData
+      setData(nextData)
+    }
+
+    loadStatistics().catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return
+      toast.error("No se pudieron cargar las estadisticas")
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [selectedCourse, selectedPeriod, selectedSubject])
 
   return (
     <div className="flex flex-col gap-6">
@@ -173,7 +206,7 @@ export default function EstadisticasPage() {
             <TrendingUp className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold">{avgScore}</div>
+            <div className="text-3xl font-bold">{data.summary.avgScore}</div>
             <p className="text-xs text-muted-foreground mt-1">
               del periodo
             </p>
@@ -188,8 +221,8 @@ export default function EstadisticasPage() {
             <CheckCircle2 className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-3xl font-bold text-success">{logradoPercentage}%</div>
-            <Progress value={logradoPercentage} className="mt-2 h-1.5" />
+            <div className="text-3xl font-bold text-success">{data.summary.logradoPercentage}%</div>
+            <Progress value={data.summary.logradoPercentage} className="mt-2 h-1.5" />
           </CardContent>
         </Card>
 
@@ -201,7 +234,7 @@ export default function EstadisticasPage() {
             <AlertTriangle className="size-4 text-muted-foreground" />
           </CardHeader>
           <CardContent>
-            <div className="text-2xl font-bold text-warning">{lowestSubject}</div>
+            <div className="text-2xl font-bold text-warning">{data.summary.lowestSubject}</div>
             <p className="text-xs text-muted-foreground mt-1">
               mayor cantidad en inicio
             </p>
@@ -217,8 +250,8 @@ export default function EstadisticasPage() {
           </CardHeader>
           <CardContent>
             <div className="flex items-baseline gap-1">
-              <span className="text-3xl font-bold">{onTimeTeachers}</span>
-              <span className="text-lg text-muted-foreground">/{totalTeachers}</span>
+              <span className="text-3xl font-bold">{data.summary.onTimeTeachers}</span>
+              <span className="text-lg text-muted-foreground">/{data.summary.totalTeachers}</span>
             </div>
             <p className="text-xs text-muted-foreground mt-1">
               completaron a tiempo
@@ -239,7 +272,7 @@ export default function EstadisticasPage() {
           </CardHeader>
           <CardContent>
             <ChartContainer config={chartConfig} className="h-[300px] w-full">
-              <BarChart data={gradeDistribution} layout="vertical">
+              <BarChart data={data.gradeDistribution} layout="vertical">
                 <XAxis type="number" />
                 <YAxis dataKey="subject" type="category" width={100} tick={{ fontSize: 12 }} />
                 <ChartTooltip content={<ChartTooltipContent />} />
@@ -277,7 +310,7 @@ export default function EstadisticasPage() {
             <ChartContainer config={chartConfig} className="h-[300px] w-full">
               <PieChart>
                 <Pie
-                  data={statusDistribution}
+                  data={data.statusDistribution}
                   cx="50%"
                   cy="50%"
                   innerRadius={60}
@@ -285,12 +318,12 @@ export default function EstadisticasPage() {
                   paddingAngle={2}
                   dataKey="value"
                   label={({ name, value }) => {
-                    const percentage = totalStatusCount > 0 ? Math.round((Number(value) / totalStatusCount) * 100) : 0
+                    const percentage = data.totalStatusCount > 0 ? Math.round((Number(value) / data.totalStatusCount) * 100) : 0
                     return `${name}: ${percentage}%`
                   }}
                   labelLine={false}
                 >
-                  {statusDistribution.map((entry, index) => (
+                  {data.statusDistribution.map((entry, index) => (
                     <Cell key={`cell-${index}`} fill={entry.fill} />
                   ))}
                 </Pie>
@@ -298,7 +331,7 @@ export default function EstadisticasPage() {
               </PieChart>
             </ChartContainer>
             <div className="text-center mt-4">
-              <p className="text-2xl font-bold">{data.students.length}</p>
+              <p className="text-2xl font-bold">{data.summary.totalStudents}</p>
               <p className="text-sm text-muted-foreground">Total de alumnos</p>
             </div>
           </CardContent>

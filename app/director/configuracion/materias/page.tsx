@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useCallback, useEffect, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -31,7 +31,6 @@ import {
 import { Plus, Trash2, Save, ChevronLeft, ChevronRight } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { usePlatformData } from "@/lib/use-platform-data"
 
 interface Criterion {
   id: string
@@ -53,6 +52,10 @@ interface Subject {
   appliesTo: string[]
   criteriaByGrade: GradeCriteria[]
   sharedCriteria?: boolean
+}
+
+interface SubjectConfigData {
+  subjects: Subject[]
 }
 
 const GRADES = ["1°", "2°", "3°", "4°", "5°", "6°"]
@@ -199,8 +202,8 @@ function CriteriaList({
 }
 
 export default function MateriasPage() {
-  const { data, reload } = usePlatformData()
   const [subjects, setSubjects] = useState<Subject[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [selectedSubjectId, setSelectedSubjectId] = useState<string | undefined>()
   const [selectedGrade, setSelectedGrade] = useState<string>(GRADES[0]!)
   const [newCriterionName, setNewCriterionName] = useState("")
@@ -210,17 +213,37 @@ export default function MateriasPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [showDetail, setShowDetail] = useState(false)
 
-  useEffect(() => {
-    if (hasChanges) return
-    const nextSubjects = (data.subjects as Subject[]).map((s) => ({
+  const applyLoadedData = useCallback((data: SubjectConfigData) => {
+    const nextSubjects = data.subjects.map((s) => ({
       ...s,
       sharedCriteria: s.sharedCriteria ?? detectSharedCriteria(s),
     }))
     setSubjects(nextSubjects)
-    if (!selectedSubjectId || !nextSubjects.some((s) => s.id === selectedSubjectId)) {
-      setSelectedSubjectId(nextSubjects[0]?.id)
+    setSelectedSubjectId((current) =>
+      current && nextSubjects.some((subject) => subject.id === current)
+        ? current
+        : nextSubjects[0]?.id
+    )
+  }, [])
+
+  const loadData = useCallback(async () => {
+    const response = await fetch("/api/director/subject-config", { cache: "no-store" })
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(error?.error ?? "No se pudieron cargar las materias")
     }
-  }, [data.subjects, hasChanges, selectedSubjectId])
+
+    const data = (await response.json()) as SubjectConfigData
+    applyLoadedData(data)
+    setLoadError(null)
+  }, [applyLoadedData])
+
+  useEffect(() => {
+    if (hasChanges) return
+    loadData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "No se pudieron cargar las materias")
+    })
+  }, [hasChanges, loadData])
 
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId)
   const isShared = selectedSubject?.sharedCriteria !== false
@@ -284,7 +307,7 @@ export default function MateriasPage() {
     nextDirtySubjectIds.delete(selectedSubject.id)
     setDirtySubjectIds(nextDirtySubjectIds)
     setHasChanges(nextDirtySubjectIds.size > 0)
-    await reload()
+    await loadData()
     toast.success(`"${subjectName}" eliminada`)
   }
 
@@ -501,7 +524,7 @@ export default function MateriasPage() {
       return
     }
 
-    await reload()
+    await loadData()
     setDirtySubjectIds(new Set())
     setHasChanges(false)
     toast.success("Cambios guardados")
@@ -519,6 +542,12 @@ export default function MateriasPage() {
           { label: "Materias y criterios" },
         ]}
       />
+
+      {loadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
 
       <div className="flex flex-col gap-4 md:gap-6 lg:grid lg:min-h-[calc(100vh-200px)] lg:grid-cols-3">
         {/* Subject List */}

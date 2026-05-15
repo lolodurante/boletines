@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
@@ -32,7 +32,6 @@ import {
 } from "lucide-react"
 import Link from "next/link"
 import { toast } from "sonner"
-import { usePlatformData } from "@/lib/use-platform-data"
 import type { ReportStatus } from "@/lib/data"
 
 interface HistorialRow {
@@ -40,6 +39,8 @@ interface HistorialRow {
   studentId: string
   studentName: string
   reportType: "ESPANOL" | "INGLES"
+  periodId: string
+  courseId: string
   courseName: string
   periodName: string
   generatedDate: string | null
@@ -48,22 +49,59 @@ interface HistorialRow {
   pdfDownloadUrl?: string
 }
 
+interface HistorialData {
+  periods: Array<{ id: string; name: string }>
+  courses: Array<{ id: string; name: string }>
+  reportHistory: HistorialRow[]
+}
+
 function getReportTypeLabel(reportType: HistorialRow["reportType"]) {
   return reportType === "INGLES" ? "Inglés" : "Español"
 }
 
 export default function HistorialPage() {
-  const { data } = usePlatformData()
+  const [data, setData] = useState<HistorialData>({ periods: [], courses: [], reportHistory: [] })
+  const [isLoading, setIsLoading] = useState(true)
   const [selectedPeriod, setSelectedPeriod] = useState("all")
   const [selectedCourse, setSelectedCourse] = useState("all")
   const [selectedStatus, setSelectedStatus] = useState("all")
   const [searchQuery, setSearchQuery] = useState("")
 
+  useEffect(() => {
+    let isMounted = true
+
+    async function loadData() {
+      setIsLoading(true)
+      const response = await fetch("/api/director/report-history", {
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+
+      if (!response.ok) {
+        toast.error("No se pudo cargar el historial")
+        if (isMounted) setIsLoading(false)
+        return
+      }
+
+      const nextData = (await response.json()) as HistorialData
+      if (isMounted) {
+        setData(nextData)
+        setIsLoading(false)
+      }
+    }
+
+    void loadData()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
   // Filter data
   const historialData: HistorialRow[] = data.reportHistory
   const filteredData = historialData.filter(row => {
-    if (selectedPeriod !== "all" && row.periodName !== data.periods.find(p => p.id === selectedPeriod)?.name) return false
-    if (selectedCourse !== "all" && row.courseName !== data.courses.find(c => c.id === selectedCourse)?.name) return false
+    if (selectedPeriod !== "all" && row.periodId !== selectedPeriod) return false
+    if (selectedCourse !== "all" && row.courseId !== selectedCourse) return false
     if (selectedStatus !== "all" && row.status !== selectedStatus) return false
     if (searchQuery && !row.studentName.toLowerCase().includes(searchQuery.toLowerCase())) return false
     return true
@@ -192,7 +230,7 @@ export default function HistorialPage() {
         <CardHeader>
           <CardTitle>Historial de boletines</CardTitle>
           <CardDescription>
-            {filteredData.length} registros encontrados
+            {isLoading ? "Cargando registros..." : `${filteredData.length} registros encontrados`}
           </CardDescription>
         </CardHeader>
         <CardContent>

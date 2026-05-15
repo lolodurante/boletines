@@ -42,11 +42,9 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { usePlatformData } from "@/lib/use-platform-data"
 import type { GradeLevel } from "@/lib/data"
 
-// Build report card data
-interface ReportCardData {
+interface ReportCardListItem {
   id: string
   studentId: string
   studentName: string
@@ -57,10 +55,13 @@ interface ReportCardData {
   courseName: string
   completedDate: string
   status: "No listo" | "Listo para revisión" | "PDF generado" | "Requiere revisión"
-  parentEmail: string | null
-  directorObservation?: string
   hasPdf: boolean
   pdfDownloadUrl?: string
+}
+
+interface ReportCardData extends ReportCardListItem {
+  parentEmail: string | null
+  directorObservation?: string
   grades: Array<{
     subjectName: string
     teacherId: string
@@ -72,15 +73,25 @@ interface ReportCardData {
   }>
 }
 
+interface ReportCardListData {
+  courses: Array<{ id: string; name: string }>
+  reportCards: ReportCardListItem[]
+}
+
 function getReportTypeLabel(reportType: ReportCardData["reportType"]) {
   return reportType === "INGLES" ? "Inglés" : "Español"
 }
 
 export default function BoletinesPage() {
   const searchParams = useSearchParams()
-  const { data } = usePlatformData()
-  const [reportCards, setReportCards] = useState<ReportCardData[]>([])
-  const dynamicReportCardsData: ReportCardData[] = reportCards
+  const [courses, setCourses] = useState<ReportCardListData["courses"]>([])
+  const [reportCards, setReportCards] = useState<ReportCardListItem[]>([])
+  const [reportDetails, setReportDetails] = useState<Record<string, ReportCardData>>({})
+  const [isListLoading, setIsListLoading] = useState(true)
+  const [isDetailLoading, setIsDetailLoading] = useState(false)
+  const [detailLoadError, setDetailLoadError] = useState<string | null>(null)
+  const [detailRetryCount, setDetailRetryCount] = useState(0)
+  const dynamicReportCardsData = reportCards
   const [selectedReportId, setSelectedReportId] = useState(dynamicReportCardsData[0]?.id)
   const [selectedCourseFilter, setSelectedCourseFilter] = useState("all")
   const [directorObservation, setDirectorObservation] = useState("")
@@ -104,16 +115,79 @@ export default function BoletinesPage() {
   if (selectedCourseFilter !== "all") bulkDownloadParams.set("courseId", selectedCourseFilter)
   const bulkDownloadHref = `/api/report-cards/bulk-download${bulkDownloadParams.size > 0 ? `?${bulkDownloadParams}` : ""}`
 
-  const selectedReport = dynamicReportCardsData.find(r => r.id === selectedReportId)
+  const selectedReportMeta = dynamicReportCardsData.find(r => r.id === selectedReportId)
+  const selectedReport = selectedReportId ? reportDetails[selectedReportId] : undefined
   const selectedReportTeachers = Array.from(
     new Map(selectedReport?.grades.map((grade) => [grade.teacherId, grade.teacherName]) ?? []).entries(),
   )
   const canGenerateSelectedReport =
-    selectedReport?.status === "Listo para revisión" || selectedReport?.status === "PDF generado"
+    selectedReportMeta?.status === "Listo para revisión" || selectedReportMeta?.status === "PDF generado"
 
   useEffect(() => {
-    setReportCards(data.directorReportCards)
-  }, [data.directorReportCards])
+    let isMounted = true
+
+    async function loadList() {
+      setIsListLoading(true)
+      const response = await fetch("/api/director/report-cards", {
+        cache: "no-store",
+        credentials: "same-origin",
+      })
+
+      if (!response.ok) {
+        toast.error("No se pudieron cargar los boletines")
+        if (isMounted) setIsListLoading(false)
+        return
+      }
+
+      const data = (await response.json()) as ReportCardListData
+      if (isMounted) {
+        setCourses(data.courses)
+        setReportCards(data.reportCards)
+        setIsListLoading(false)
+      }
+    }
+
+    void loadList()
+
+    return () => {
+      isMounted = false
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!selectedReportId || reportDetails[selectedReportId]) return
+    const controller = new AbortController()
+    setDetailLoadError(null)
+    setIsDetailLoading(true)
+
+    async function loadDetail() {
+      const response = await fetch(`/api/director/report-cards/${selectedReportId}`, {
+        cache: "no-store",
+        credentials: "same-origin",
+        signal: controller.signal,
+      })
+
+      if (!response.ok) {
+        setDetailLoadError("No se pudo cargar el detalle del boletin")
+        setIsDetailLoading(false)
+        return
+      }
+
+      const detail = (await response.json()) as ReportCardData
+      setReportDetails((current) => ({ ...current, [detail.id]: detail }))
+      setIsDetailLoading(false)
+    }
+
+    loadDetail().catch((error) => {
+      if (error instanceof DOMException && error.name === "AbortError") return
+      setDetailLoadError("No se pudo cargar el detalle del boletin")
+      setIsDetailLoading(false)
+    })
+
+    return () => {
+      controller.abort()
+    }
+  }, [reportDetails, selectedReportId, detailRetryCount])
 
   useEffect(() => {
     setDirectorObservation(selectedReport?.directorObservation ?? "")
@@ -139,22 +213,36 @@ export default function BoletinesPage() {
   }, [dynamicReportCardsData, searchParams, selectedReportId])
 
   const updateSelectedReport = (status: ReportCardData["status"], pdfDownloadUrl?: string) => {
-    if (!selectedReport) return
+    if (!selectedReportId) return
 
     setReportCards((current) =>
       current.map((report) =>
-        report.id === selectedReport.id
+        report.id === selectedReportId
           ? {
               ...report,
               status,
               completedDate: report.completedDate,
-              directorObservation,
               hasPdf: status === "PDF generado" ? true : report.hasPdf,
               pdfDownloadUrl: pdfDownloadUrl ?? report.pdfDownloadUrl,
             }
           : report,
       ),
     )
+    setReportDetails((current) => {
+      const detail = current[selectedReportId]
+      if (!detail) return current
+
+      return {
+        ...current,
+        [selectedReportId]: {
+          ...detail,
+          status,
+          directorObservation,
+          hasPdf: status === "PDF generado" ? true : detail.hasPdf,
+          pdfDownloadUrl: pdfDownloadUrl ?? detail.pdfDownloadUrl,
+        },
+      }
+    })
   }
 
   const handleGenerateReport = async () => {
@@ -220,8 +308,9 @@ export default function BoletinesPage() {
 
     updateSelectedReport("Requiere revisión")
     setIsRevisionDialogOpen(false)
+    const revisionTeacherName = selectedReportTeachers.find(([teacherId]) => teacherId === revisionTeacher)?.[1]
     toast.success("Solicitud de revision enviada", {
-      description: `Enviada a ${data.teachers.find((teacher) => teacher.id === revisionTeacher)?.name ?? "docente"}`
+      description: `Enviada a ${revisionTeacherName ?? "docente"}`
     })
     setRevisionTeacher("")
     setRevisionMessage("")
@@ -247,7 +336,7 @@ export default function BoletinesPage() {
               <div>
                 <CardTitle className="text-base">Boletines</CardTitle>
                 <CardDescription>
-                  {filteredReportCards.length} de {dynamicReportCardsData.length} boletines
+                  {isListLoading ? "Cargando boletines..." : `${filteredReportCards.length} de ${dynamicReportCardsData.length} boletines`}
                 </CardDescription>
               </div>
               <div className="grid grid-cols-1 gap-2">
@@ -268,7 +357,7 @@ export default function BoletinesPage() {
                   </SelectTrigger>
                   <SelectContent>
                     <SelectItem value="all">Todos los cursos</SelectItem>
-                    {data.courses.map(course => (
+                    {courses.map(course => (
                       <SelectItem key={course.id} value={course.id}>{course.name}</SelectItem>
                     ))}
                   </SelectContent>
@@ -331,7 +420,7 @@ export default function BoletinesPage() {
                       )} />
                     </button>
                   ))}
-                  {filteredReportCards.length === 0 && (
+                  {!isListLoading && filteredReportCards.length === 0 && (
                     <p className="py-8 text-center text-sm text-muted-foreground">
                       No hay boletines para este curso.
                     </p>
@@ -529,6 +618,37 @@ export default function BoletinesPage() {
                   Generar PDF
                 </Button>
               </div>
+            </Card>
+          ) : selectedReportMeta && isDetailLoading ? (
+            <Card className="h-full min-h-[500px]">
+              <CardHeader>
+                <CardTitle>Boletin {getReportTypeLabel(selectedReportMeta.reportType)} — {selectedReportMeta.studentName}</CardTitle>
+                <CardDescription>
+                  {selectedReportMeta.courseName} • {selectedReportMeta.periodName}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex h-full items-center justify-center text-sm text-muted-foreground">
+                Cargando detalle del boletin...
+              </CardContent>
+            </Card>
+          ) : selectedReportMeta && detailLoadError ? (
+            <Card className="h-full min-h-[500px]">
+              <CardHeader>
+                <CardTitle>Boletin {getReportTypeLabel(selectedReportMeta.reportType)} — {selectedReportMeta.studentName}</CardTitle>
+                <CardDescription>
+                  {selectedReportMeta.courseName} • {selectedReportMeta.periodName}
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="flex h-full flex-col items-center justify-center gap-3">
+                <p className="text-sm text-destructive">{detailLoadError}</p>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => { setDetailLoadError(null); setDetailRetryCount(c => c + 1) }}
+                >
+                  Reintentar
+                </Button>
+              </CardContent>
             </Card>
           ) : (
             <Card className="h-full flex items-center justify-center">

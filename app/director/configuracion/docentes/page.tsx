@@ -51,18 +51,36 @@ import {
 } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { usePlatformData } from "@/lib/use-platform-data"
+import type { PeriodStatus } from "@/lib/data"
 
 interface Assignment {
-  id: string
+  teacherId: string
   courseId: string
   subjectId: string
+  periodId: string
+}
+
+interface TeacherConfigData {
+  periods: Array<{ id: string; name: string; status: PeriodStatus }>
+  courses: Array<{ id: string; name: string }>
+  subjects: Array<{ id: string; name: string }>
+  teachers: Array<{ id: string; name: string; email: string; isActive: boolean }>
+  courseAssignments: Assignment[]
+}
+
+const emptyData: TeacherConfigData = {
+  periods: [],
+  courses: [],
+  subjects: [],
+  teachers: [],
+  courseAssignments: [],
 }
 
 export default function DocentesPage() {
-  const { data, error } = usePlatformData()
-  const [selectedTeacherId, setSelectedTeacherId] = useState(data.teachers[0]?.id)
-  const [assignments, setAssignments] = useState(data.courseAssignments)
+  const [data, setData] = useState<TeacherConfigData>(emptyData)
+  const [error, setError] = useState<string | null>(null)
+  const [selectedTeacherId, setSelectedTeacherId] = useState<string>()
+  const [assignments, setAssignments] = useState<Assignment[]>([])
   const [isDialogOpen, setIsDialogOpen] = useState(false)
   const [newCourseId, setNewCourseId] = useState("")
   const [selectedSubjectIds, setSelectedSubjectIds] = useState<string[]>([])
@@ -71,11 +89,38 @@ export default function DocentesPage() {
   const selectedTeacher = data.teachers.find(t => t.id === selectedTeacherId)
 
   useEffect(() => {
-    setAssignments(data.courseAssignments)
-    if (!selectedTeacherId || !data.teachers.some(teacher => teacher.id === selectedTeacherId)) {
-      setSelectedTeacherId(data.teachers[0]?.id)
+    let isMounted = true
+
+    async function loadData() {
+      try {
+        const response = await fetch("/api/director/teacher-config", { cache: "no-store" })
+        if (!response.ok) {
+          const payload = (await response.json().catch(() => null)) as { error?: string } | null
+          throw new Error(payload?.error ?? "No se pudieron cargar los docentes")
+        }
+
+        const nextData = (await response.json()) as TeacherConfigData
+        if (!isMounted) return
+
+        setData(nextData)
+        setAssignments(nextData.courseAssignments)
+        setError(null)
+        setSelectedTeacherId((current) =>
+          current && nextData.teachers.some((teacher) => teacher.id === current)
+            ? current
+            : nextData.teachers[0]?.id
+        )
+      } catch (loadError) {
+        if (!isMounted) return
+        setError(loadError instanceof Error ? loadError.message : "No se pudieron cargar los docentes")
+      }
     }
-  }, [data.courseAssignments, data.teachers, selectedTeacherId])
+
+    loadData()
+    return () => {
+      isMounted = false
+    }
+  }, [])
   
   const teacherAssignments = assignments.filter(a => 
     a.teacherId === selectedTeacherId && a.periodId === activePeriod?.id
@@ -172,6 +217,12 @@ export default function DocentesPage() {
       return
     }
 
+    setData((current) => ({
+      ...current,
+      teachers: current.teachers.map((teacher) =>
+        teacher.id === selectedTeacher.id ? { ...teacher, isActive: true } : teacher
+      ),
+    }))
     toast.success("Acceso habilitado")
   }
 
@@ -190,6 +241,12 @@ export default function DocentesPage() {
       return
     }
 
+    setData((current) => ({
+      ...current,
+      teachers: current.teachers.map((teacher) =>
+        teacher.id === selectedTeacher.id ? { ...teacher, isActive: false } : teacher
+      ),
+    }))
     toast.success("Acceso desactivado")
   }
 

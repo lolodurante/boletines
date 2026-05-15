@@ -27,7 +27,6 @@ import {
 } from "lucide-react"
 import { useState } from "react"
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetTrigger } from "@/components/ui/sheet"
-import { usePlatformData } from "@/lib/use-platform-data"
 
 interface NavItem {
   label: string
@@ -83,14 +82,11 @@ interface AppSidebarProps {
   role: "director" | "docente" | "psicopedagoga"
   userName: string
   userRole: string
+  pendingReportCount?: number
 }
 
-export function AppSidebar({ role, userName, userRole }: AppSidebarProps) {
+export function AppSidebar({ role, userName, userRole, pendingReportCount = 0 }: AppSidebarProps) {
   const pathname = usePathname()
-  const { data } = usePlatformData()
-  const pendingReportCount = data.reportCards.filter(
-    (report) => report.status === "Listo para revisión",
-  ).length
   const navItems = role === "director" ? directorNavItems : role === "psicopedagoga" ? psicopedagogaNavItems : teacherNavItems
   const [openCollapsibles, setOpenCollapsibles] = useState<string[]>([])
   const [isMobileOpen, setIsMobileOpen] = useState(false)

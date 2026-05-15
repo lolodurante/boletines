@@ -1,18 +1,21 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
 import { PageHeader } from "@/components/page-header"
 import { GripVertical, Save } from "lucide-react"
 import { toast } from "sonner"
 import { cn } from "@/lib/utils"
-import { usePlatformData } from "@/lib/use-platform-data"
 
 interface SubjectItem {
   id: string
   name: string
   entryKind: string
+}
+
+interface SubjectConfigData {
+  subjects: Array<{ id: string; name: string; reportType: string; entryKind?: string }>
 }
 
 function getEntryKindLabel(kind: string) {
@@ -114,18 +117,36 @@ function DraggableList({
 }
 
 export default function OrdenBoletinesPage() {
-  const { data, reload } = usePlatformData()
   const [espanol, setEspanol] = useState<SubjectItem[]>([])
   const [ingles, setIngles] = useState<SubjectItem[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [hasChanges, setHasChanges] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
 
-  useEffect(() => {
-    if (hasChanges) return
-    const all = data.subjects as Array<{ id: string; name: string; reportType: string; entryKind?: string }>
+  const applyLoadedData = useCallback((data: SubjectConfigData) => {
+    const all = data.subjects
     setEspanol(all.filter((s) => s.reportType === "ESPANOL").map((s) => ({ id: s.id, name: s.name, entryKind: s.entryKind ?? "ACADEMIC" })))
     setIngles(all.filter((s) => s.reportType === "INGLES").map((s) => ({ id: s.id, name: s.name, entryKind: s.entryKind ?? "ACADEMIC" })))
-  }, [data.subjects, hasChanges])
+  }, [])
+
+  const loadData = useCallback(async () => {
+    const response = await fetch("/api/director/subject-config", { cache: "no-store" })
+    if (!response.ok) {
+      const error = (await response.json().catch(() => null)) as { error?: string } | null
+      throw new Error(error?.error ?? "No se pudo cargar el orden")
+    }
+
+    const data = (await response.json()) as SubjectConfigData
+    applyLoadedData(data)
+    setLoadError(null)
+  }, [applyLoadedData])
+
+  useEffect(() => {
+    if (hasChanges) return
+    loadData().catch((error) => {
+      setLoadError(error instanceof Error ? error.message : "No se pudo cargar el orden")
+    })
+  }, [hasChanges, loadData])
 
   const handleChange = (type: "ESPANOL" | "INGLES") => (items: SubjectItem[]) => {
     if (type === "ESPANOL") setEspanol(items)
@@ -166,7 +187,7 @@ export default function OrdenBoletinesPage() {
       return
     }
 
-    await reload()
+    await loadData()
     setHasChanges(false)
     toast.success("Orden guardado")
   }
@@ -181,6 +202,12 @@ export default function OrdenBoletinesPage() {
           { label: "Orden de boletines" },
         ]}
       />
+
+      {loadError && (
+        <div className="rounded-lg border border-destructive/50 bg-destructive/10 px-4 py-3 text-sm text-destructive">
+          {loadError}
+        </div>
+      )}
 
       <div className="grid gap-4 md:gap-6 lg:grid-cols-2">
         <DraggableList title="Español" items={espanol} onChange={handleChange("ESPANOL")} />
