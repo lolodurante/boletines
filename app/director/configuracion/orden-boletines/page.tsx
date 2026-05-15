@@ -18,10 +18,15 @@ interface SubjectConfigData {
   subjects: Array<{ id: string; name: string; reportType: string; entryKind?: string }>
 }
 
-function getEntryKindLabel(kind: string) {
-  if (kind === "TEACHER_OBSERVATION") return "Obs. docente"
-  if (kind === "ABSENCES") return "Inasistencias"
-  return null
+function FixedRow({ name, label }: { name: string; label: string }) {
+  return (
+    <li className="flex items-center gap-3 px-4 py-3 bg-muted/30 select-none">
+      <span className="size-4 shrink-0" />
+      <span className="text-sm font-medium flex-1 text-muted-foreground">{name}</span>
+      <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full shrink-0">{label}</span>
+      <span className="text-xs text-muted-foreground/40 w-5 text-right shrink-0">—</span>
+    </li>
+  )
 }
 
 function DraggableList({
@@ -35,6 +40,10 @@ function DraggableList({
 }) {
   const dragIndex = useRef<number | null>(null)
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null)
+
+  const absences = items.filter((i) => i.entryKind === "ABSENCES")
+  const comments = items.filter((i) => i.entryKind === "TEACHER_OBSERVATION")
+  const draggable = items.filter((i) => i.entryKind !== "ABSENCES" && i.entryKind !== "TEACHER_OBSERVATION")
 
   const handleDragStart = (index: number) => {
     dragIndex.current = index
@@ -52,10 +61,10 @@ function DraggableList({
       setDragOverIndex(null)
       return
     }
-    const next = [...items]
+    const next = [...draggable]
     const [moved] = next.splice(from, 1)
     next.splice(dropIndex, 0, moved!)
-    onChange(next)
+    onChange([...absences, ...next, ...comments])
     dragIndex.current = null
     setDragOverIndex(null)
   }
@@ -74,14 +83,16 @@ function DraggableList({
         </p>
       </CardHeader>
       <CardContent className="p-0 flex-1">
-        {items.length === 0 ? (
-          <p className="text-sm text-muted-foreground text-center py-10 px-4">
-            No hay materias en este boletín.
-          </p>
-        ) : (
-          <ul className="divide-y">
-            {items.map((item, index) => {
-              const badge = getEntryKindLabel(item.entryKind)
+        <ul className="divide-y">
+          {absences.map((item) => (
+            <FixedRow key={item.id} name={item.name} label="Inasistencias" />
+          ))}
+          {draggable.length === 0 && absences.length === 0 && comments.length === 0 ? (
+            <li className="text-sm text-muted-foreground text-center py-10 px-4">
+              No hay materias en este boletín.
+            </li>
+          ) : (
+            draggable.map((item, index) => {
               const isOver = dragOverIndex === index
               return (
                 <li
@@ -98,19 +109,17 @@ function DraggableList({
                 >
                   <GripVertical className="size-4 text-muted-foreground/50 shrink-0" />
                   <span className="text-sm font-medium flex-1">{item.name}</span>
-                  {badge && (
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-0.5 rounded-full shrink-0">
-                      {badge}
-                    </span>
-                  )}
                   <span className="text-xs text-muted-foreground/40 tabular-nums w-5 text-right shrink-0">
                     {index + 1}
                   </span>
                 </li>
               )
-            })}
-          </ul>
-        )}
+            })
+          )}
+          {comments.map((item) => (
+            <FixedRow key={item.id} name={item.name} label="Obs. docente" />
+          ))}
+        </ul>
       </CardContent>
     </Card>
   )
@@ -155,23 +164,12 @@ export default function OrdenBoletinesPage() {
   }
 
   const handleSave = async () => {
-    const allItems = [...espanol, ...ingles]
-    const orderPayload = allItems
-      .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
-      .map((item, i) => ({
-        id: item.id,
-        order: i,
-      }))
+    const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    const isOrderable = (item: SubjectItem) => isUuid(item.id) && item.entryKind !== "ABSENCES" && item.entryKind !== "TEACHER_OBSERVATION"
 
     // Assign per-boletín order (reset index per group)
-    const espanolOrder = espanol
-      .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
-      .map((item, i) => ({ id: item.id, order: i }))
-    const inglesOrder = ingles
-      .filter((item) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(item.id))
-      .map((item, i) => ({ id: item.id, order: i }))
-
-    void orderPayload
+    const espanolOrder = espanol.filter(isOrderable).map((item, i) => ({ id: item.id, order: i }))
+    const inglesOrder = ingles.filter(isOrderable).map((item, i) => ({ id: item.id, order: i }))
 
     setIsSaving(true)
     const response = await fetch("/api/subjects/reorder", {

@@ -177,7 +177,7 @@ export async function POST(request: Request) {
             }))
           : undefined,
       comments:
-        commentEvaluations.length > 0
+        reportCard.type === "INGLES" && commentEvaluations.length > 0
           ? commentEvaluations.map((evaluation) => ({
               label: evaluation.subject.entryKind === "TEACHER_OBSERVATION"
                 ? "Comentario"
