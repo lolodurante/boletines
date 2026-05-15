@@ -34,16 +34,13 @@ export async function POST(request: Request) {
 }
 
 async function syncTeacherRecord(user: { id: string; role: "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA" }) {
-  if (user.role === "TEACHER") {
-    await prisma.teacher.upsert({
-      where: { userId: user.id },
-      create: { userId: user.id },
-      update: {},
-    })
-    return
-  }
+  if (user.role !== "TEACHER") return
 
-  await prisma.teacher.deleteMany({ where: { userId: user.id } })
+  await prisma.teacher.upsert({
+    where: { userId: user.id },
+    create: { userId: user.id },
+    update: {},
+  })
 }
 
 async function activateExistingUser(userId: string, actorRole: "TEACHER" | "DIRECTOR" | "ADMIN" | "PSICOPEDAGOGA") {

@@ -13,14 +13,26 @@ function mapReportStatus(status: string): ReportStatus {
   return "No listo"
 }
 
-export async function getDirectorReportCardListData() {
-  const [courses, reportCards] = await Promise.all([
+export async function getDirectorReportCardListData(periodId?: string) {
+  // Default to the active period to avoid loading all report cards across all periods
+  let effectivePeriodId = periodId
+  if (!effectivePeriodId) {
+    const activePeriod = await prisma.academicPeriod.findFirst({
+      where: { status: "ACTIVE" },
+      select: { id: true },
+      orderBy: { startDate: "desc" },
+    })
+    effectivePeriodId = activePeriod?.id
+  }
+
+  const [courses, reportCards, periods] = await Promise.all([
     prisma.course.findMany({
       where: { active: true },
       select: { grade: true, division: true },
       orderBy: [{ grade: "asc" }, { division: "asc" }],
     }),
     prisma.reportCard.findMany({
+      where: effectivePeriodId ? { periodId: effectivePeriodId } : {},
       select: {
         id: true,
         studentId: true,
@@ -46,13 +58,19 @@ export async function getDirectorReportCardListData() {
         { student: { lastName: "asc" } },
       ],
     }),
+    prisma.academicPeriod.findMany({
+      select: { id: true, name: true },
+      orderBy: { startDate: "desc" },
+    }),
   ])
 
   return {
+    activePeriodId: effectivePeriodId,
     courses: courses.map((course) => ({
       id: courseIdFromParts(course.grade, course.division),
       name: courseNameFromParts(course.grade, course.division),
     })),
+    periods: periods.map((p) => ({ id: p.id, name: p.name })),
     reportCards: reportCards.map((reportCard) => {
       const hasPdf = reportCard.pdfStatus === "GENERATED"
 

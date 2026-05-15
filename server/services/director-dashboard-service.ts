@@ -31,14 +31,22 @@ function mapPeriodStatus(status: string): PeriodStatus {
 }
 
 export async function getDirectorDashboardData() {
+  // Step 1: fetch active period first (lightweight query) so we can filter in step 2
+  const activePeriodRecord = await prisma.academicPeriod.findFirst({
+    where: { status: "ACTIVE" },
+    orderBy: { startDate: "desc" },
+  })
+
+  // Step 2: all remaining queries in parallel — no sequential round trips
   const [
-    periods,
     courses,
     students,
     teachers,
     reportStatusCounts,
+    assignments,
+    submittedEvaluations,
+    recentReports,
   ] = await Promise.all([
-    prisma.academicPeriod.findMany({ orderBy: { startDate: "asc" } }),
     prisma.course.findMany({
       where: { active: true },
       orderBy: [{ grade: "asc" }, { division: "asc" }],
@@ -55,9 +63,39 @@ export async function getDirectorDashboardData() {
       by: ["status"],
       _count: { _all: true },
     }),
+    activePeriodRecord
+      ? prisma.courseAssignment.findMany({
+          where: { periodId: activePeriodRecord.id },
+          select: { teacherId: true, subjectId: true, grade: true, division: true },
+        })
+      : Promise.resolve([]),
+    activePeriodRecord
+      ? prisma.evaluation.findMany({
+          where: {
+            periodId: activePeriodRecord.id,
+            status: { in: ["SUBMITTED", "APPROVED"] },
+          },
+          select: {
+            studentId: true,
+            teacherId: true,
+            subjectId: true,
+            student: { select: { grade: true, division: true } },
+          },
+        })
+      : Promise.resolve([]),
+    prisma.reportCard.findMany({
+      where: { status: "READY_FOR_REVIEW" },
+      take: 5,
+      orderBy: { updatedAt: "desc" },
+      select: {
+        id: true,
+        studentId: true,
+        updatedAt: true,
+        student: { select: { firstName: true, lastName: true, grade: true, division: true } },
+      },
+    }),
   ])
 
-  const activePeriodRecord = periods.find((period) => period.status === "ACTIVE") ?? periods[0]
   const activePeriod = activePeriodRecord
     ? {
         id: activePeriodRecord.id,
@@ -76,38 +114,6 @@ export async function getDirectorDashboardData() {
     courseStudents.add(student.id)
     studentsByCourse.set(courseId, courseStudents)
   }
-
-  const assignments = activePeriod
-    ? await prisma.courseAssignment.findMany({
-        where: { periodId: activePeriod.id },
-        select: { teacherId: true, subjectId: true, grade: true, division: true },
-      })
-    : []
-  const submittedEvaluations = activePeriod
-    ? await prisma.evaluation.findMany({
-        where: {
-          periodId: activePeriod.id,
-          status: { in: ["SUBMITTED", "APPROVED"] },
-        },
-        select: {
-          studentId: true,
-          teacherId: true,
-          subjectId: true,
-          student: { select: { grade: true, division: true } },
-        },
-      })
-    : []
-  const recentReports = await prisma.reportCard.findMany({
-    where: { status: "READY_FOR_REVIEW" },
-    take: 5,
-    orderBy: { updatedAt: "desc" },
-    select: {
-      id: true,
-      studentId: true,
-      updatedAt: true,
-      student: { select: { firstName: true, lastName: true, grade: true, division: true } },
-    },
-  })
 
   const teacherNameById = new Map(teachers.map((teacher) => [teacher.id, teacher.user.name]))
   const assignmentsByCourse = new Map<string, typeof assignments>()

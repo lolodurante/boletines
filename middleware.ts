@@ -27,7 +27,7 @@ function clearSupabaseAuthCookies(request: NextRequest, response: NextResponse) 
   })
 }
 
-export async function proxy(request: NextRequest) {
+export async function middleware(request: NextRequest) {
   if (!isSupabaseConfigured()) return NextResponse.next()
 
   let response = NextResponse.next({ request })
@@ -39,11 +39,10 @@ export async function proxy(request: NextRequest) {
         getAll() {
           return request.cookies.getAll()
         },
-        setAll(cookiesToSet, headers) {
+        setAll(cookiesToSet) {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value))
           response = NextResponse.next({ request })
           cookiesToSet.forEach(({ name, value, options }) => response.cookies.set(name, value, options))
-          Object.entries(headers).forEach(([key, value]) => response.headers.set(key, value))
         },
       },
     },
@@ -68,7 +67,13 @@ export async function proxy(request: NextRequest) {
     pathname.startsWith("/api/periods") ||
     pathname.startsWith("/api/subjects") ||
     pathname.startsWith("/api/grading-scales") ||
-    pathname.startsWith("/api/auth/")
+    pathname.startsWith("/api/auth/") ||
+    pathname.startsWith("/api/director/") ||
+    pathname.startsWith("/api/students") ||
+    pathname.startsWith("/api/courses") ||
+    pathname.startsWith("/api/users") ||
+    pathname.startsWith("/api/adapted-criteria") ||
+    pathname.startsWith("/api/adapted-students-config")
 
   if (!user && isProtectedPage) {
     const url = request.nextUrl.clone()
